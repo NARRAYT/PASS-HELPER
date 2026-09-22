@@ -104,6 +104,11 @@ body{
 .rename-file-list li button{background:none;border:none;color:var(--accent);cursor:pointer;font-weight:700;padding:0 4px;flex-shrink:0;font-size:.9rem;}
 .rename-file-list li button:hover{color:var(--accent-hover);}
 
+.pixel-colors{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;}
+.pixel-colors label{font-size:.8rem;font-weight:600;display:flex;flex-direction:column;gap:4px;}
+.pixel-colors input[type="color"]{width:48px;height:32px;padding:0;border:1px solid var(--accent);border-radius:4px;cursor:pointer;background:none;}
+.pixel-canvas{display:block;max-width:100%;margin:0 0 14px;border:1px solid var(--accent);border-radius:6px;background-color:var(--card);}
+
 footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,.45);}
 
 @media (max-width:640px){
@@ -123,10 +128,24 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
   <section class="tools-panel">
     <div class="tool-card">
-      <h2>Скачать все картинки</h2>
-      <p>Соберёт все картинки мода в один ZIP-архив, разложенные по папкам: «Аксессуары» (по типу детали), «Модели» (по группе) и «Конструктор» (база).</p>
-      <button id="download-all-zip" type="button">Скачать ZIP</button>
-      <div id="download-all-status" class="tool-status" aria-live="polite"></div>
+      <h2>Проверить пиксели</h2>
+      <p>Загруженная картинка превращается в маску: непрозрачные пиксели рисуются цветом маски, прозрачные — цветом фона, а полупрозрачные — смешением. Так видно все прозрачности на картинке.</p>
+      <div id="pixel-dropzone" class="rename-dropzone">
+        <p>Перетащите картинку сюда или выберите вручную</p>
+        <input type="file" id="pixel-file-input" accept="image/*" style="display:none;">
+        <button type="button" id="pixel-browse-button">Выбрать файл</button>
+      </div>
+      <div class="pixel-colors">
+        <label for="pixel-mask-color">Цвет маски
+          <input type="color" id="pixel-mask-color" value="#000000">
+        </label>
+        <label for="pixel-bg-color">Цвет фона
+          <input type="color" id="pixel-bg-color" value="#ffffff">
+        </label>
+      </div>
+      <canvas id="pixel-canvas" class="pixel-canvas" style="display:none;"></canvas>
+      <button id="pixel-download" type="button" disabled>Скачать результат</button>
+      <div id="pixel-status" class="tool-status" aria-live="polite"></div>
     </div>
 
     <div class="tool-card">
@@ -153,7 +172,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
   <footer>Локальный инструмент примерки. Картинки берутся из папки img этого репозитория.</footer>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function() {
     'use strict';
@@ -622,91 +640,118 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
-    // --- Скачать все картинки ZIP-архивом, разложенные по папкам ---
+    // --- Проверить пиксели: показать альфа-канал картинки как маску на фоне ---
 
-    async function fetchImageBlob(url) {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        const blob = await response.blob();
-        if (!blob || blob.size === 0) throw new Error('Пустой файл');
-        return blob;
+    function hexToRgb(hex) {
+        const clean = hex.replace('#', '');
+        return {
+            r: parseInt(clean.substring(0, 2), 16),
+            g: parseInt(clean.substring(2, 4), 16),
+            b: parseInt(clean.substring(4, 6), 16)
+        };
     }
 
-    function buildImageManifest() {
-        const entries = [];
+    let pixelOriginalImageData = null;
+    let pixelOriginalFileName = 'картинка';
 
-        for (const config of Object.values(CONSTRUCTORS)) {
-            entries.push({
-                url: config.baseUrl,
-                folder: config.zipBaseFolder,
-                fileName: 'база-конструктора.png'
-            });
+    function initPixelTool() {
+        const dropzone = document.getElementById('pixel-dropzone');
+        const fileInput = document.getElementById('pixel-file-input');
+        const browseBtn = document.getElementById('pixel-browse-button');
+        const maskColorInput = document.getElementById('pixel-mask-color');
+        const bgColorInput = document.getElementById('pixel-bg-color');
+        const canvas = document.getElementById('pixel-canvas');
+        const downloadBtn = document.getElementById('pixel-download');
+        const statusEl = document.getElementById('pixel-status');
 
-            for (const [partLabel, partConfig] of Object.entries(config.parts)) {
-                for (const [optionName, url] of Object.entries(partConfig.options)) {
-                    if (!url) continue;
-                    entries.push({
-                        url,
-                        folder: `${config.zipPartsFolder}/${sanitizeFileName(partLabel)}`,
-                        fileName: `${sanitizeFileName(optionName)}.png`
-                    });
-                }
+        if (!dropzone || !fileInput || !browseBtn || !maskColorInput || !bgColorInput || !canvas || !downloadBtn || !statusEl) return;
+
+        const ctx = canvas.getContext('2d');
+
+        function renderMask() {
+            if (!pixelOriginalImageData) return;
+
+            const { width, height, data } = pixelOriginalImageData;
+            const mask = hexToRgb(maskColorInput.value);
+            const bg = hexToRgb(bgColorInput.value);
+
+            const output = ctx.createImageData(width, height);
+            const outData = output.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const a = data[i + 3] / 255;
+                outData[i] = Math.round(bg.r * (1 - a) + mask.r * a);
+                outData[i + 1] = Math.round(bg.g * (1 - a) + mask.g * a);
+                outData[i + 2] = Math.round(bg.b * (1 - a) + mask.b * a);
+                outData[i + 3] = 255;
             }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.putImageData(output, 0, 0);
         }
 
-        for (const groupData of Object.values(MODELS_DATA)) {
-            for (const model of groupData.models) {
-                entries.push({
-                    url: model.base,
-                    folder: `Модели/${sanitizeFileName(groupData.header)}`,
-                    fileName: `${model.id}_${sanitizeFileName(model.details)}.png`
-                });
+        function loadFile(file) {
+            if (!file || !file.type.startsWith('image/')) return;
+
+            pixelOriginalFileName = file.name.replace(/\.[^.]+$/, '') || 'картинка';
+            statusEl.textContent = 'Загружаем картинку...';
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = img.naturalWidth;
+                    tempCanvas.height = img.naturalHeight;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.drawImage(img, 0, 0);
+
+                    pixelOriginalImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                    canvas.style.display = 'block';
+                    downloadBtn.disabled = false;
+                    statusEl.textContent = `Готово — ${tempCanvas.width}×${tempCanvas.height}px.`;
+                    renderMask();
+                };
+                img.onerror = function() {
+                    statusEl.textContent = 'Не удалось прочитать картинку.';
+                };
+                img.src = event.target.result;
+            };
+            reader.onerror = function() {
+                statusEl.textContent = 'Не удалось прочитать файл.';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        browseBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            loadFile(file);
+            fileInput.value = '';
+        });
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('drag-over');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('drag-over');
+            if (e.dataTransfer && e.dataTransfer.files.length) {
+                loadFile(e.dataTransfer.files[0]);
             }
-        }
+        });
 
-        return entries;
-    }
+        maskColorInput.addEventListener('input', renderMask);
+        bgColorInput.addEventListener('input', renderMask);
 
-    async function downloadAllAsZip() {
-        const button = document.getElementById('download-all-zip');
-        const statusEl = document.getElementById('download-all-status');
-        if (!button || !statusEl) return;
-
-        if (typeof JSZip === 'undefined') {
-            statusEl.textContent = 'Не удалось загрузить архиватор (проверьте интернет-соединение) — попробуйте обновить страницу.';
-            return;
-        }
-
-        const manifest = buildImageManifest();
-        const zip = new JSZip();
-        const failed = [];
-
-        button.disabled = true;
-
-        for (let i = 0; i < manifest.length; i++) {
-            const item = manifest[i];
-            statusEl.textContent = `Скачивание ${i + 1} из ${manifest.length}...`;
-            try {
-                const blob = await fetchImageBlob(item.url);
-                zip.folder(item.folder).file(item.fileName, blob);
-            } catch (err) {
-                failed.push(`${item.folder}/${item.fileName}`);
-            }
-        }
-
-        statusEl.textContent = 'Формируем архив...';
-
-        try {
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            triggerDownload(zipBlob, 'картинки-мода.zip');
-            statusEl.textContent = failed.length
-                ? `Готово, но ${failed.length} файл(ов) не удалось скачать: ${failed.join(', ')}`
-                : 'Готово — все картинки в архиве.';
-        } catch (err) {
-            statusEl.textContent = 'Не удалось собрать архив: ' + err.message;
-        } finally {
-            button.disabled = false;
-        }
+        downloadBtn.addEventListener('click', () => {
+            canvas.toBlob((blob) => {
+                if (blob) triggerDownload(blob, `${pixelOriginalFileName}_маска.png`);
+            }, 'image/png');
+        });
     }
 
     // --- Сохранить костюмы с приставкой(ами) в названии ---
