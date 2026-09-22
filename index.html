@@ -44,9 +44,9 @@ body{
 .model-section-header:not(:first-child){margin-top:28px;padding-top:20px;border-top:1px solid rgba(52,30,15,.15);}
 .model-section-header h3{margin:0;font-size:1.15rem;color:var(--ink);}
 
-.bulk-upload-button,#duplicate-constructor{display:inline-block;box-sizing:border-box;background-color:var(--accent);color:#fff;border:none;cursor:pointer;font-weight:700;transition:background-color .2s;border-radius:4px;}
+.bulk-upload-button,.constructor-duplicate-btn{display:inline-block;box-sizing:border-box;background-color:var(--accent);color:#fff;border:none;cursor:pointer;font-weight:700;transition:background-color .2s;border-radius:4px;}
 .bulk-upload-button{padding:5px 10px;border-radius:4px;font-size:.85em;line-height:1;}
-.bulk-upload-button:hover,#duplicate-constructor:hover{background-color:var(--accent-hover);}
+.bulk-upload-button:hover,.constructor-duplicate-btn:hover{background-color:var(--accent-hover);}
 .bulk-upload-button.drag-over-bulk{outline:2px dashed #fff;}
 
 .model-wrapper{flex-shrink:0;width:100px;height:150px;position:relative;margin:0 0 2px;cursor:pointer;border:none;background-color:var(--card);border-radius:5px;overflow:hidden;}
@@ -68,10 +68,10 @@ body{
 }
 .duplicate-model-button:hover{background-color:var(--accent-hover);opacity:1;}
 
-#constructor-area-wrapper{width:100px;flex-shrink:0;position:relative;display:flex;flex-direction:column;align-items:center;height:300px;}
-#duplicate-constructor{padding:2px 5px;border-radius:3px;font-size:.9em;margin-top:5px;width:100px;order:3;}
-#constructor-model-container{width:100px;height:150px;margin:0 auto 5px;position:relative;order:1;cursor:default;}
-#constructor-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:0;width:100px;order:2;}
+.constructor-area-wrapper{width:100px;flex-shrink:0;position:relative;display:flex;flex-direction:column;align-items:center;height:300px;}
+.constructor-duplicate-btn{padding:2px 5px;border-radius:3px;font-size:.9em;margin-top:5px;width:100px;order:3;}
+.constructor-model-container{width:100px;height:150px;margin:0 auto 5px;position:relative;order:1;cursor:default;}
+.constructor-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:0;width:100px;order:2;}
 .constructor-control-shtuka label{font-size:.7em;color:var(--ink);flex-shrink:0;margin:0;line-height:1;display:block;}
 .constructor-control-shtuka select{background-color:var(--tan);color:#fff;border:1px solid var(--accent);padding:1px 20px 1px 2px;border-radius:3px;cursor:pointer;font-size:.9em;width:100%;box-sizing:border-box;appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 2px center;background-size:24px;}
 
@@ -150,14 +150,34 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 (function() {
     'use strict';
 
-    const C_BASE_URL = "img/конструктор/основа1.png";
-
-    const C_PARTS = {
-        'Хвост': { id: 'tail-layer', options: { 'куцый': 'img/конструктор/куцый.png', 'беличий': 'img/конструктор/беличий.png', 'пышный': 'img/конструктор/пышный1.png', 'пушистый': 'img/конструктор/пушистый1.png', 'умеренный': 'img/конструктор/умеренный.png', 'гладкий': 'img/конструктор/гладкий.png', 'тонкий': 'img/конструктор/тонкий.png' } },
-        'Грудь': { id: 'chest-layer', options: { '1': '', '2': 'img/конструктор/грудь2.png', '3': 'img/конструктор/грудь3.png' } },
-        'Грива': { id: 'mane-layer', options: { '1': '', '2': 'img/конструктор/грива1.png', '3': 'img/конструктор/грива2.png', '4': 'img/конструктор/грива3.png' } },
-        'Щёки': { id: 'cheeks-layer', options: { '0': 'img/конструктор/щёки0.png', '1': 'img/конструктор/щёки1.png','2': 'img/конструктор/щёки2.png', '3': 'img/конструктор/щёки3.png', '4': 'img/конструктор/щёки4.png' } },
-        'Уши': { id: 'ears-layer', options: { 'кёрл': 'img/конструктор/кёрл.png', 'торчком': 'img/конструктор/торчок.png', 'длинные': 'img/конструктор/длинные.png', 'вислые': 'img/конструктор/вислые.png', 'раскосые': 'img/конструктор/раскосые.png' } }
+    // Конфигурация всех конструкторов сайта. Каждый ключ — отдельный независимый
+    // конструктор: своя база, свой набор деталей, своя папка выгрузки в ZIP.
+    const CONSTRUCTORS = {
+        'new': {
+            groupId: 'new-models-row',
+            baseUrl: 'img/конструктор/основа1.png',
+            zipBaseFolder: 'Конструктор',
+            zipPartsFolder: 'Аксессуары',
+            parts: {
+                'Хвост': { id: 'tail-layer', options: { 'куцый': 'img/конструктор/куцый.png', 'беличий': 'img/конструктор/беличий.png', 'пышный': 'img/конструктор/пышный1.png', 'пушистый': 'img/конструктор/пушистый1.png', 'умеренный': 'img/конструктор/умеренный.png', 'гладкий': 'img/конструктор/гладкий.png', 'тонкий': 'img/конструктор/тонкий.png' } },
+                'Грудь': { id: 'chest-layer', options: { '1': '', '2': 'img/конструктор/грудь2.png', '3': 'img/конструктор/грудь3.png' } },
+                'Грива': { id: 'mane-layer', options: { '1': '', '2': 'img/конструктор/грива1.png', '3': 'img/конструктор/грива2.png', '4': 'img/конструктор/грива3.png' } },
+                'Щёки': { id: 'cheeks-layer', options: { '0': 'img/конструктор/щёки0.png', '1': 'img/конструктор/щёки1.png','2': 'img/конструктор/щёки2.png', '3': 'img/конструктор/щёки3.png', '4': 'img/конструктор/щёки4.png' } },
+                'Уши': { id: 'ears-layer', options: { 'кёрл': 'img/конструктор/кёрл.png', 'торчком': 'img/конструктор/торчок.png', 'длинные': 'img/конструктор/длинные.png', 'вислые': 'img/конструктор/вислые.png', 'раскосые': 'img/конструктор/раскосые.png' } }
+            }
+        },
+        'old': {
+            groupId: 'old-models-row',
+            baseUrl: 'img/конструктор старая модель/база.png',
+            zipBaseFolder: 'Конструктор старая модель',
+            zipPartsFolder: 'Аксессуары старая модель',
+            parts: {
+                'Щёки': { id: 'old-cheeks-layer', options: { '-': '', 'щёки 1': 'img/конструктор старая модель/щёки1.png', 'щёки 2': 'img/конструктор старая модель/щёки2.png', 'щёки 3': 'img/конструктор старая модель/щёки3.png' } },
+                'Грива': { id: 'old-mane-layer', options: { '-': '', 'умеренная': 'img/конструктор старая модель/умеренная.png', 'пушистая': 'img/конструктор старая модель/пушистая.png', 'пышная': 'img/конструктор старая модель/пышная.png' } },
+                'Хвост': { id: 'old-tail-layer', options: { 'куцый': 'img/конструктор старая модель/куцый.png', 'тонкий': 'img/конструктор старая модель/тонкий.png', 'гладкий': 'img/конструктор старая модель/гладкий.png', 'умеренный': 'img/конструктор старая модель/умеренный.png', 'пушистый': 'img/конструктор старая модель/пушистый.png', 'пышный': 'img/конструктор старая модель/пышный.png', 'беличий': 'img/конструктор старая модель/беличий.png' } },
+                'Уши': { id: 'old-ears-layer', options: { 'торчком': 'img/конструктор старая модель/торчком.png', 'висячие': 'img/конструктор старая модель/висячие.png', 'длинные': 'img/конструктор старая модель/длинные.png', 'раскосые': 'img/конструктор старая модель/раскосые.png', 'вывернутые': 'img/конструктор старая модель/вывернутые.png' } }
+            }
+        }
     };
 
     const MODELS_DATA = {
@@ -236,29 +256,35 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         `;
     }
 
-    const constructorControlsHtml = Object.entries(C_PARTS).map(([label, config]) => createSelectHtml(label, config)).join('');
     const getDefaultUrl = (part) => Object.values(part.options)[0];
 
-    const constructorBlockHtml = `
-        <div id="constructor-area-wrapper" class="model-section">
-            <div id="constructor-model-container" class="model-wrapper" data-is-constructor="true">
-                <img src="${C_BASE_URL}" alt="" class="constructor-base">
-                <img src="${getDefaultUrl(C_PARTS['Хвост'])}" alt="" class="constructor-layer" id="${C_PARTS['Хвост'].id}">
-                <img src="${getDefaultUrl(C_PARTS['Грудь'])}" alt="" class="constructor-layer" id="${C_PARTS['Грудь'].id}">
-                <img src="${getDefaultUrl(C_PARTS['Грива'])}" alt="" class="constructor-layer" id="${C_PARTS['Грива'].id}">
-                <img src="${getDefaultUrl(C_PARTS['Щёки'])}" alt="" class="constructor-layer" id="${C_PARTS['Щёки'].id}">
-                <img src="${getDefaultUrl(C_PARTS['Уши'])}" alt="" class="constructor-layer" id="${C_PARTS['Уши'].id}">
+    function generateConstructorBlockHtml(key, config) {
+        const controlsHtml = Object.entries(config.parts).map(([label, partConfig]) => createSelectHtml(label, partConfig)).join('');
+        const layersHtml = Object.entries(config.parts).map(([, partConfig]) =>
+            `<img src="${getDefaultUrl(partConfig)}" alt="" class="constructor-layer" id="${partConfig.id}">`
+        ).join('');
+
+        return `
+            <div id="${key}-constructor-area-wrapper" class="model-section constructor-area-wrapper" data-constructor-key="${key}">
+                <div id="${key}-constructor-model-container" class="model-wrapper constructor-model-container" data-is-constructor="true">
+                    <img src="${config.baseUrl}" alt="" class="constructor-base">
+                    ${layersHtml}
+                </div>
+                <div id="${key}-constructor-controls" class="constructor-controls">
+                    ${controlsHtml}
+                </div>
+                <button type="button" class="constructor-duplicate-btn" data-constructor-key="${key}">ДОБАВИТЬ</button>
             </div>
-            <div id="constructor-controls">
-                ${constructorControlsHtml}
-            </div>
-            <button id="duplicate-constructor" type="button">ДОБАВИТЬ</button>
-        </div>
-    `;
+        `;
+    }
+
+    function findConstructorForGroup(groupId) {
+        return Object.entries(CONSTRUCTORS).find(([, config]) => config.groupId === groupId) || null;
+    }
 
     function generateModelsGroupHtml(groupId, groupData) {
         const modelsHtml = groupData.models.map(generateModelHtml).join('');
-        const isNewModelsRow = groupId === 'new-models-row';
+        const constructorEntry = findConstructorForGroup(groupId);
 
         return `
             <div class="model-section-header">
@@ -267,7 +293,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             </div>
             <div class="models" id="${groupId}">
                 ${modelsHtml}
-                ${isNewModelsRow ? constructorBlockHtml : ''}
+                ${constructorEntry ? generateConstructorBlockHtml(constructorEntry[0], constructorEntry[1]) : ''}
             </div>
         `;
     }
@@ -277,11 +303,13 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         .join('');
 
     function setInitialConstructorValues() {
-        for (const partConfig of Object.values(C_PARTS)) {
-            const select = document.getElementById(`${partConfig.id}-select`);
-            const targetImage = document.getElementById(partConfig.id);
-            if (select && targetImage) {
-                targetImage.src = select.value;
+        for (const config of Object.values(CONSTRUCTORS)) {
+            for (const partConfig of Object.values(config.parts)) {
+                const select = document.getElementById(`${partConfig.id}-select`);
+                const targetImage = document.getElementById(partConfig.id);
+                if (select && targetImage) {
+                    targetImage.src = select.value;
+                }
             }
         }
     }
@@ -348,7 +376,15 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         modelsContainer.addEventListener('click', function(e) {
             const dupButton = e.target.closest('.duplicate-model-button');
             const bulkButton = e.target.closest('.bulk-upload-button');
+            const constructorDupButton = e.target.closest('.constructor-duplicate-btn');
             const wrapper = e.target.closest('.model-wrapper');
+
+            if (constructorDupButton) {
+                e.preventDefault();
+                const key = constructorDupButton.dataset.constructorKey;
+                handleConstructorDuplicate(key);
+                return;
+            }
 
             if (dupButton) {
                 e.preventDefault();
@@ -454,7 +490,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     }
 
     function initializeConstructor() {
-        document.querySelectorAll('#constructor-controls select').forEach(select => {
+        document.querySelectorAll('.constructor-controls select').forEach(select => {
             select.addEventListener('change', function() {
                 const targetImage = document.getElementById(this.dataset.layerId);
                 if (targetImage) targetImage.src = this.value;
@@ -464,36 +500,35 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     let savedConstructCount = 0;
 
-    function initializeDuplication() {
-        const duplicateButton = document.getElementById('duplicate-constructor');
-        if (duplicateButton) {
-            duplicateButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                savedConstructCount++;
-                const currentData = getCurrentConstructorState();
-                const newModelHtml = generateSavedModelHtml(currentData, savedConstructCount);
+    function handleConstructorDuplicate(key) {
+        const config = CONSTRUCTORS[key];
+        if (!config) return;
 
-                createAndInsertNewModel(newModelHtml);
-            });
-        }
+        savedConstructCount++;
+        const currentState = getCurrentConstructorState(config);
+        const newModelHtml = generateSavedModelHtml(config, currentState, key, savedConstructCount);
+        createAndInsertNewModel(key, newModelHtml);
     }
 
-    function createAndInsertNewModel(html) {
+    function createAndInsertNewModel(key, html) {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html.trim();
         const newModelSection = tempDiv.firstChild;
 
-        document.getElementById('constructor-area-wrapper').insertAdjacentElement('beforebegin', newModelSection);
+        const areaWrapper = document.getElementById(`${key}-constructor-area-wrapper`);
+        if (areaWrapper) {
+            areaWrapper.insertAdjacentElement('beforebegin', newModelSection);
+        }
 
         return newModelSection;
     }
 
-    function getCurrentConstructorState() {
+    function getCurrentConstructorState(config) {
         const state = {};
-        for (const [key, config] of Object.entries(C_PARTS)) {
-            const select = document.getElementById(`${config.id}-select`);
+        for (const [label, partConfig] of Object.entries(config.parts)) {
+            const select = document.getElementById(`${partConfig.id}-select`);
             if (select) {
-                state[key] = {
+                state[label] = {
                     url: select.value,
                     name: select.options[select.selectedIndex].text
                 };
@@ -502,22 +537,24 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         return state;
     }
 
-    function generateSavedModelHtml(state, index) {
+    function generateSavedModelHtml(config, state, key, index) {
         let modelLayers = '';
         let detailsHtml = '';
 
-        for (const [key, item] of Object.entries(state)) {
-            if (item.url) modelLayers += `<img src="${item.url}" alt="" class="constructor-layer">`;
-            detailsHtml += `${key.toLowerCase().replace('ё', 'е')}: ${item.name.toLowerCase()}<br>`;
+        for (const [label, item] of Object.entries(state)) {
+            // Значение "-" означает "без этой детали" — деталь не рисуем и не пишем в описание.
+            if (!item.url || item.name === '-') continue;
+            modelLayers += `<img src="${item.url}" alt="" class="constructor-layer">`;
+            detailsHtml += `${label.toLowerCase().replace('ё', 'е')}: ${item.name.toLowerCase()}<br>`;
         }
 
-        const costumeId = `costume-saved-${index}`;
+        const costumeId = `costume-${key}-saved-${index}`;
 
         return `
             <div class="model-section">
-                <div class="model-wrapper" data-model-id="saved-${index}">
-                    <div id="saved-construct-display-${index}" style="position: relative; width: 100%; height: 100%;">
-                        <img src="${C_BASE_URL}" alt="" class="constructor-base">
+                <div class="model-wrapper" data-model-id="${key}-saved-${index}">
+                    <div style="position: relative; width: 100%; height: 100%;">
+                        <img src="${config.baseUrl}" alt="" class="constructor-base">
                         ${modelLayers}
                         <img src="" alt="" class="overlay-costume" id="${costumeId}">
                         <input type="file" class="file-input" data-target-id="${costumeId}" accept="image/*" style="display:none;">
@@ -563,20 +600,22 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     function buildImageManifest() {
         const entries = [];
 
-        entries.push({
-            url: C_BASE_URL,
-            folder: 'Конструктор',
-            fileName: 'база-конструктора.png'
-        });
+        for (const config of Object.values(CONSTRUCTORS)) {
+            entries.push({
+                url: config.baseUrl,
+                folder: config.zipBaseFolder,
+                fileName: 'база-конструктора.png'
+            });
 
-        for (const [partLabel, config] of Object.entries(C_PARTS)) {
-            for (const [optionName, url] of Object.entries(config.options)) {
-                if (!url) continue;
-                entries.push({
-                    url,
-                    folder: `Аксессуары/${sanitizeFileName(partLabel)}`,
-                    fileName: `${sanitizeFileName(optionName)}.png`
-                });
+            for (const [partLabel, partConfig] of Object.entries(config.parts)) {
+                for (const [optionName, url] of Object.entries(partConfig.options)) {
+                    if (!url) continue;
+                    entries.push({
+                        url,
+                        folder: `${config.zipPartsFolder}/${sanitizeFileName(partLabel)}`,
+                        fileName: `${sanitizeFileName(optionName)}.png`
+                    });
+                }
             }
         }
 
@@ -754,7 +793,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         setInitialConstructorValues();
         initializeEventListenersAndDragAndDrop();
         initializeConstructor();
-        initializeDuplication();
 
         const downloadAllButton = document.getElementById('download-all-zip');
         if (downloadAllButton) {
