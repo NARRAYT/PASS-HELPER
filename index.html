@@ -127,20 +127,26 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
   <section class="tools-panel">
     <div class="tool-card">
-      <h2>Сверить папки</h2>
-      <p>Выберите две папки, чтобы сравнить список файлов и найти расхождения в названиях.</p>
-      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
-        <button type="button" id="dir-check-btn">Выбрать</button>
-      </div>
-      <div id="dir-check-status" class="tool-status" aria-live="polite" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 6px; max-height: 200px; overflow-y: auto;"></div>
-    </div>
-    <div class="tool-card">
       <h2>Проверить пиксели</h2>
       <p>Проверка чистоты изображения маской.</p>
       <div id="pixel-dropzone" class="rename-dropzone">
         <input type="file" id="pixel-file-input" accept="image/*" style="display:none;">
         <button type="button" id="pixel-browse-button">Выбрать файл</button>
       </div>
+      <div class="tool-card">
+      <h2>Сверить папки</h2>
+      <p>Добавьте нужное количество папок для проверки. Сайт выведет список отсутствующих и совпадающих файлов.</p>
+      
+      <div id="dir-check-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+        <button type="button" id="dir-add-row-btn" style="background-color: var(--tan); padding: 5px 10px; font-size: 0.8rem;">+ добавить папку</button>
+        <button type="button" id="dir-run-check-btn">Сверить все папки</button>
+      </div>
+
+      <div id="dir-check-status" class="tool-status" aria-live="polite" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 6px; max-height: 250px; overflow-y: auto;"></div>
+    </div>
       <div class="pixel-colors">
         <label for="pixel-mask-color">Цвет маски
           <input type="color" id="pixel-mask-color" value="#000000">
@@ -283,58 +289,164 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         }
     };
 
-  // --- Проверка соответствия файлов в двух папках ---
+    // --- Проверка соответствия файлов в произвольном количестве папок ---
     function initDirCheckTool() {
-        const checkBtn = document.getElementById('dir-check-btn');
+        const listContainer = document.getElementById('dir-check-list');
+        const addBtn = document.getElementById('dir-add-row-btn');
+        const runBtn = document.getElementById('dir-run-check-btn');
         const statusEl = document.getElementById('dir-check-status');
 
-        if (!checkBtn || !statusEl) return;
+        if (!listContainer || !addBtn || !runBtn || !statusEl) return;
 
-        checkBtn.addEventListener('click', async () => {
+        let rowCounter = 0;
+
+        // Создание маленького окошка/строки выбора папки
+        function createDirRow() {
+            rowCounter++;
+            const row = document.createElement('div');
+            row.className = 'dir-check-row';
+            row.style.cssText = 'display: flex; gap: 6px; align-items: center; background: var(--card); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--tan);';
+            
+            // Сохраняем Handle папки прямо на элементах DOM
+            row.dirHandle = null;
+
+            const nameLabel = document.createElement('span');
+            nameLabel.style.cssText = 'flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+            nameLabel.textContent = `Папка ${rowCounter}: (не выбрана)`;
+
+            const selectBtn = document.createElement('button');
+            selectBtn.type = 'button';
+            selectBtn.textContent = 'Выбрать';
+            selectBtn.style.cssText = 'padding: 4px 8px; font-size: 0.75rem; border-radius: 4px;';
+            selectBtn.addEventListener('click', async () => {
+                try {
+                    const handle = await window.showDirectoryPicker();
+                    row.dirHandle = handle;
+                    nameLabel.textContent = `📁 ${handle.name}`;
+                    nameLabel.title = handle.name;
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        statusEl.textContent = 'Ошибка выбора папки: ' + err.message;
+                    }
+                }
+            });
+
+            const dupBtn = document.createElement('button');
+            dupBtn.type = 'button';
+            dupBtn.textContent = '+';
+            dupBtn.title = 'Сдублировать окошко';
+            dupBtn.style.cssText = 'padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; background-color: var(--tan);';
+            dupBtn.addEventListener('click', () => {
+                const newRow = createDirRow();
+                row.insertAdjacentElement('afterend', newRow);
+                updateRemoveButtons();
+            });
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = '✕';
+            removeBtn.title = 'Удалить';
+            removeBtn.style.cssText = 'padding: 4px 6px; font-size: 0.75rem; border-radius: 4px; background: none; border: 1px solid var(--accent); color: var(--accent);';
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                updateRemoveButtons();
+            });
+
+            row.appendChild(nameLabel);
+            row.appendChild(selectBtn);
+            row.appendChild(dupBtn);
+            row.appendChild(removeBtn);
+
+            return row;
+        }
+
+        function updateRemoveButtons() {
+            const rows = listContainer.querySelectorAll('.dir-check-row');
+            rows.forEach(r => {
+                const btn = r.querySelector('button:last-child');
+                if (btn) btn.disabled = rows.length <= 2; // Мимум 2 папки для сравнения
+            });
+        }
+
+        addBtn.addEventListener('click', () => {
+            const newRow = createDirRow();
+            listContainer.appendChild(newRow);
+            updateRemoveButtons();
+        });
+
+        // Инициализация двух первых окошек по умолчанию
+        listContainer.appendChild(createDirRow());
+        listContainer.appendChild(createDirRow());
+        updateRemoveButtons();
+
+        // Сверка всех выбранных папок
+        runBtn.addEventListener('click', async () => {
             if (typeof window.showDirectoryPicker !== 'function') {
-                statusEl.textContent = 'Ваш браузер не поддерживает выбор папок напрямую (попробуйте Chrome, Edge или Yandex).';
+                statusEl.textContent = 'Ваш браузер не поддерживает выбор папок (используйте Chrome, Edge, Yandex).';
                 return;
             }
 
+            const rows = Array.from(listContainer.querySelectorAll('.dir-check-row'));
+            const selectedFolders = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                if (!rows[i].dirHandle) {
+                    statusEl.textContent = `⚠️ Пожалуйста, выберите папку №${i + 1} или удалите пустое окошко.`;
+                    return;
+                }
+                selectedFolders.push({
+                    name: rows[i].dirHandle.name,
+                    handle: rows[i].dirHandle,
+                    files: new Set()
+                });
+            }
+
+            statusEl.textContent = 'Чтение файлов из папок...';
+
             try {
-                statusEl.textContent = 'Выберите первую папку...';
-                const dir1Handle = await window.showDirectoryPicker();
-                statusEl.textContent = 'Выберите вторую папку...';
-                const dir2Handle = await window.showDirectoryPicker();
-
-                statusEl.textContent = 'Сравниваем файлы...';
-
-                const files1 = new Set();
-                const files2 = new Set();
-
-                for await (const entry of dir1Handle.values()) {
-                    if (entry.kind === 'file') files1.add(entry.name);
-                }
-                for await (const entry of dir2Handle.values()) {
-                    if (entry.kind === 'file') files2.add(entry.name);
+                // Собираем списки файлов
+                for (const folder of selectedFolders) {
+                    for await (const entry of folder.handle.values()) {
+                        if (entry.kind === 'file') {
+                            folder.files.add(entry.name);
+                        }
+                    }
                 }
 
-                const missingIn2 = [...files1].filter(f => !files2.has(f));
-                const missingIn1 = [...files2].filter(f => !files1.has(f));
+                // Собираем полное множество всех уникальных файлов из всех папок
+                const allFiles = new Set();
+                selectedFolders.forEach(f => f.files.forEach(fileName => allFiles.add(fileName)));
 
-                if (missingIn2.length === 0 && missingIn1.length === 0) {
-                    statusEl.textContent = `✅ Папки идеально совпадают!\nВсего файлов: ${files1.size}`;
+                let report = `📊 Результаты проверки (${selectedFolders.length} папок, всего уникальных файлов: ${allFiles.size}):\n\n`;
+                let hasDifferences = false;
+
+                // Проверяем каждый файл по каждой папке
+                const missingReport = [];
+
+                selectedFolders.forEach(folder => {
+                    const missingInThisFolder = [];
+                    allFiles.forEach(file => {
+                        if (!folder.files.has(file)) {
+                            missingInThisFolder.push(file);
+                        }
+                    });
+
+                    if (missingInThisFolder.length > 0) {
+                        hasDifferences = true;
+                        missingReport.push(`❌ В папке "${folder.name}" НЕТ файлов (${missingInThisFolder.length} шт.):\n` + missingInThisFolder.map(f => `  - ${f}`).join('\n'));
+                    }
+                });
+
+                if (!hasDifferences) {
+                    report += `✅ Содержимое всех ${selectedFolders.length} папок абсолютно одинаковое.`;
                 } else {
-                    let res = `❌ Найдены несоответствия:\n\n`;
-                    if (missingIn2.length > 0) {
-                        res += `Есть в "${dir1Handle.name}", но НЕТ в "${dir2Handle.name}":\n` + missingIn2.map(f => ` - ${f}`).join('\n') + '\n\n';
-                    }
-                    if (missingIn1.length > 0) {
-                        res += `Есть в "${dir2Handle.name}", но НЕТ в "${dir1Handle.name}":\n` + missingIn1.map(f => ` - ${f}`).join('\n');
-                    }
-                    statusEl.textContent = res.trim();
+                    report += missingReport.join('\n\n');
                 }
+
+                statusEl.textContent = report;
+
             } catch (err) {
-                if (err && err.name === 'AbortError') {
-                    statusEl.textContent = 'Отменено пользователем.';
-                } else {
-                    statusEl.textContent = 'Ошибка при чтении папок: ' + err.message;
-                }
+                statusEl.textContent = 'Ошибка при чтении файлов: ' + err.message;
             }
         });
     }
