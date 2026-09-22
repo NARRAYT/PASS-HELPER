@@ -133,20 +133,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         <input type="file" id="pixel-file-input" accept="image/*" style="display:none;">
         <button type="button" id="pixel-browse-button">Выбрать файл</button>
       </div>
-      <div class="tool-card">
-      <h2>Сверить папки</h2>
-      <p>Добавьте нужное количество папок для проверки. Сайт выведет список отсутствующих и совпадающих файлов.</p>
-      
-      <div id="dir-check-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-      </div>
-
-      <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-        <button type="button" id="dir-add-row-btn" style="background-color: var(--tan); padding: 5px 10px; font-size: 0.8rem;">+ добавить папку</button>
-        <button type="button" id="dir-run-check-btn">Сверить все папки</button>
-      </div>
-
-      <div id="dir-check-status" class="tool-status" aria-live="polite" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 6px; max-height: 250px; overflow-y: auto;"></div>
-    </div>
       <div class="pixel-colors">
         <label for="pixel-mask-color">Цвет маски
           <input type="color" id="pixel-mask-color" value="#000000">
@@ -159,6 +145,21 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         <canvas id="pixel-canvas" class="pixel-canvas" style="display:none;"></canvas>
       </div>
       <div id="pixel-status" class="tool-status" aria-live="polite"></div>
+    </div>
+
+    <div class="tool-card">
+      <h2>Сверить папки</h2>
+      <p>Добавьте нужное количество папок для проверки. Сайт выведет список отсутствующих и совпадающих файлов.</p>
+      
+      <div id="dir-check-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+        <button type="button" id="dir-add-row-btn" style="background-color: var(--tan); padding: 5px 10px; font-size: 0.8rem;">+ добавить папку</button>
+        <button type="button" id="dir-run-check-btn">Сверить все папки</button>
+      </div>
+
+      <div id="dir-check-status" class="tool-status" aria-live="polite" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 6px; max-height: 250px; overflow-y: auto;"></div>
     </div>
 
     <div class="tool-card">
