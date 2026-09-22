@@ -365,7 +365,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             const rows = listContainer.querySelectorAll('.dir-check-row');
             rows.forEach(r => {
                 const btn = r.querySelector('button:last-child');
-                if (btn) btn.disabled = rows.length <= 2; // Мимум 2 папки для сравнения
+                if (btn) btn.disabled = rows.length <= 2;
             });
         }
 
@@ -375,15 +375,12 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             updateRemoveButtons();
         });
 
-        // Инициализация двух первых окошек по умолчанию
         listContainer.appendChild(createDirRow());
         listContainer.appendChild(createDirRow());
         updateRemoveButtons();
-
-        // Сверка всех выбранных папок
         runBtn.addEventListener('click', async () => {
             if (typeof window.showDirectoryPicker !== 'function') {
-                statusEl.textContent = 'Ваш браузер не поддерживает выбор папок (используйте Chrome, Edge, Yandex).';
+                statusEl.textContent = 'Ваш браузер не поддерживает выбор папок.';
                 return;
             }
 
@@ -392,7 +389,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
             for (let i = 0; i < rows.length; i++) {
                 if (!rows[i].dirHandle) {
-                    statusEl.textContent = `⚠️ Пожалуйста, выберите папку №${i + 1} или удалите пустое окошко.`;
+                    statusEl.textContent = `Пожалуйста, выберите папку №${i + 1} или удалите пустое окошко.`;
                     return;
                 }
                 selectedFolders.push({
@@ -405,7 +402,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             statusEl.textContent = 'Чтение файлов из папок...';
 
             try {
-                // Собираем списки файлов
                 for (const folder of selectedFolders) {
                     for await (const entry of folder.handle.values()) {
                         if (entry.kind === 'file') {
@@ -414,14 +410,11 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                     }
                 }
 
-                // Собираем полное множество всех уникальных файлов из всех папок
                 const allFiles = new Set();
                 selectedFolders.forEach(f => f.files.forEach(fileName => allFiles.add(fileName)));
 
-                let report = `📊 Результаты проверки (${selectedFolders.length} папок, всего уникальных файлов: ${allFiles.size}):\n\n`;
+                let report = `Результаты проверки (${selectedFolders.length} папок, всего файлов: ${allFiles.size})\n\n`;
                 let hasDifferences = false;
-
-                // Проверяем каждый файл по каждой папке
                 const missingReport = [];
 
                 selectedFolders.forEach(folder => {
@@ -439,7 +432,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 });
 
                 if (!hasDifferences) {
-                    report += `✅ Содержимое всех ${selectedFolders.length} папок абсолютно одинаковое.`;
+                    report += `✅ Содержимое всех ${selectedFolders.length} папок одинаковое.`;
                 } else {
                     report += missingReport.join('\n\n');
                 }
