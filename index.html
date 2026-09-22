@@ -273,9 +273,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             zipBaseFolder: 'Конструктор котёнок',
             zipPartsFolder: 'Аксессуары котёнок',
             parts: {
-                // У котят некоторые детали используют одну и ту же картинку на несколько названий
-                // (файлы названы через "_" — например торчком_вывернутые.png), поэтому здесь
-                // указано полное название каждой детали, а не сокращённое.
                 'Уши': { id: 'kit-ears-layer', options: { 'торчком/вывернутые': 'img/котёнок конструктор/торчком_вывернутые.png', 'висячие': 'img/котёнок конструктор/висячие.png', 'длинные/раскосые': 'img/котёнок конструктор/раскосые_длинные.png' } },
                 'Хвост': { id: 'kit-tail-layer', options: { 'куцый': 'img/котёнок конструктор/куцый.png', 'тонкий/гладкий/беличий': 'img/котёнок конструктор/тонкий_гладкий_беличий.png', 'умеренный': 'img/котёнок конструктор/умеренный.png', 'пушистый': 'img/котёнок конструктор/пушистый.png', 'пышный': 'img/котёнок конструктор/пышный.png' } }
             }
@@ -989,7 +986,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
             const input = document.createElement('input');
             input.type = 'text';
-            input.placeholder = 'например: ликой';
+            input.placeholder = 'ликой, ориентал 47 48 и тд';
             input.className = 'rename-suffix-input';
             if (initialValue) input.value = initialValue;
 
