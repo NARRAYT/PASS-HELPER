@@ -84,9 +84,16 @@ body{
 .tool-card button:disabled{opacity:.5;cursor:not-allowed;}
 .tool-status{margin-top:10px;font-size:.8rem;line-height:1.4;color:rgba(52,30,15,.85);min-height:1.2em;}
 
-.rename-controls{display:flex;flex-direction:column;gap:4px;margin-bottom:14px;}
+.rename-controls{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
 .rename-controls label{font-size:.8rem;font-weight:600;}
-.rename-controls input[type="text"]{padding:6px 8px;border-radius:4px;border:1px solid var(--accent);font-size:.9rem;font-family:inherit;}
+.rename-suffix-list{display:flex;flex-direction:column;gap:6px;}
+.rename-suffix-row{display:flex;gap:6px;align-items:center;}
+.rename-suffix-row input[type="text"]{flex:1;padding:6px 8px;border-radius:4px;border:1px solid var(--accent);font-size:.9rem;font-family:inherit;}
+.rename-suffix-row button{background:none;border:1px solid var(--accent);color:var(--accent);cursor:pointer;font-weight:700;border-radius:4px;width:28px;height:28px;flex-shrink:0;font-size:1rem;line-height:1;padding:0;}
+.rename-suffix-row button:hover{background-color:var(--accent);color:#fff;}
+.rename-suffix-row button:disabled{opacity:.35;cursor:not-allowed;background:none;color:var(--accent);}
+.rename-add-suffix{align-self:flex-start;padding:4px 10px;border-radius:4px;font-size:.8rem;background-color:var(--tan);color:#fff;border:none;cursor:pointer;font-weight:700;}
+.rename-add-suffix:hover{background-color:var(--accent-hover);}
 
 .rename-dropzone{border:2px dashed var(--accent);border-radius:8px;padding:18px;text-align:center;margin-bottom:12px;background-color:var(--card);}
 .rename-dropzone.drag-over{border-color:#fff;background-color:var(--tan);}
@@ -124,10 +131,11 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     <div class="tool-card">
       <h2>Сохранить костюмы с приставкой</h2>
-      <p>Загрузите несколько PNG/JPG, впишите приставку — получите ZIP с файлами вида <code>имя_приставка.png</code>.</p>
+      <p>Загрузите несколько PNG/JPG, впишите одну или несколько приставок — каждая картинка сохранится в стольких копиях, сколько приставок вы укажете: <code>имя_приставка.png</code>. Перед сохранением нужно выбрать папку на диске.</p>
       <div class="rename-controls">
-        <label for="rename-suffix">Приставка</label>
-        <input type="text" id="rename-suffix" placeholder="например: ликой">
+        <label>Приставки</label>
+        <div id="rename-suffix-list" class="rename-suffix-list"></div>
+        <button type="button" id="rename-add-suffix" class="rename-add-suffix">+ добавить приставку</button>
       </div>
       <div id="rename-dropzone" class="rename-dropzone">
         <p>Перетащите файлы сюда или выберите вручную</p>
@@ -135,7 +143,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         <button type="button" id="rename-browse-button">Выбрать файлы</button>
       </div>
       <ul id="rename-file-list" class="rename-file-list"></ul>
-      <button id="rename-download-zip" type="button" disabled>Скачать переименованные (ZIP)</button>
+      <button id="rename-save-files" type="button" disabled>Сохранить в папку</button>
       <div id="rename-status" class="tool-status" aria-live="polite"></div>
     </div>
   </section>
@@ -701,20 +709,79 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         }
     }
 
-    // --- Сохранить костюмы с приставкой в названии ---
+    // --- Сохранить костюмы с приставкой(ами) в названии ---
 
     let renamePendingFiles = [];
+    let suffixRowCounter = 0;
 
     function initRenameTool() {
         const dropzone = document.getElementById('rename-dropzone');
         const fileInput = document.getElementById('rename-file-input');
         const browseBtn = document.getElementById('rename-browse-button');
         const listEl = document.getElementById('rename-file-list');
-        const downloadBtn = document.getElementById('rename-download-zip');
+        const saveBtn = document.getElementById('rename-save-files');
         const statusEl = document.getElementById('rename-status');
-        const suffixInput = document.getElementById('rename-suffix');
+        const suffixListEl = document.getElementById('rename-suffix-list');
+        const addSuffixBtn = document.getElementById('rename-add-suffix');
 
-        if (!dropzone || !fileInput || !browseBtn || !listEl || !downloadBtn || !statusEl || !suffixInput) return;
+        if (!dropzone || !fileInput || !browseBtn || !listEl || !saveBtn || !statusEl || !suffixListEl || !addSuffixBtn) return;
+
+        const supportsFsAccess = typeof window.showDirectoryPicker === 'function';
+
+        // --- Управление списком приставок ---
+
+        function addSuffixRow(initialValue) {
+            suffixRowCounter++;
+            const row = document.createElement('div');
+            row.className = 'rename-suffix-row';
+            row.dataset.rowId = String(suffixRowCounter);
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'например: ликой';
+            input.className = 'rename-suffix-input';
+            if (initialValue) input.value = initialValue;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = '✕';
+            removeBtn.title = 'Убрать приставку';
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                updateRemoveButtonsState();
+            });
+
+            row.appendChild(input);
+            row.appendChild(removeBtn);
+            suffixListEl.appendChild(row);
+            updateRemoveButtonsState();
+            return row;
+        }
+
+        function updateRemoveButtonsState() {
+            const rows = suffixListEl.querySelectorAll('.rename-suffix-row');
+            // Не даём убрать последнюю оставшуюся строку — приставка должна быть хотя бы одна.
+            rows.forEach(row => {
+                const btn = row.querySelector('button');
+                if (btn) btn.disabled = rows.length <= 1;
+            });
+        }
+
+        function getSuffixes() {
+            const inputs = suffixListEl.querySelectorAll('.rename-suffix-input');
+            const values = [];
+            inputs.forEach(inp => {
+                const v = inp.value.trim();
+                if (v) values.push(v);
+            });
+            // Убираем дубликаты, сохраняя порядок.
+            return [...new Set(values)];
+        }
+
+        addSuffixBtn.addEventListener('click', () => addSuffixRow(''));
+        addSuffixRow(''); // первая строка по умолчанию
+
+        // --- Управление списком файлов ---
 
         function addFiles(fileArray) {
             for (const f of fileArray) {
@@ -743,7 +810,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 li.appendChild(removeBtn);
                 listEl.appendChild(li);
             });
-            downloadBtn.disabled = renamePendingFiles.length === 0;
+            saveBtn.disabled = renamePendingFiles.length === 0;
         }
 
         browseBtn.addEventListener('click', () => fileInput.click());
@@ -765,49 +832,95 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             }
         });
 
-        downloadBtn.addEventListener('click', async () => {
-            const suffixRaw = suffixInput.value.trim();
-            if (!suffixRaw) {
-                statusEl.textContent = 'Впишите приставку перед скачиванием.';
-                return;
-            }
-            if (!renamePendingFiles.length) return;
+        // --- Построение списка результирующих файлов: каждый исходник x каждая приставка ---
 
-            if (typeof JSZip === 'undefined') {
-                statusEl.textContent = 'Не удалось загрузить архиватор (проверьте интернет-соединение) — попробуйте обновить страницу.';
-                return;
-            }
-
-            downloadBtn.disabled = true;
-            statusEl.textContent = 'Готовим архив...';
-
-            const zip = new JSZip();
+        function buildOutputList(suffixes) {
             const usedNames = new Set();
+            const output = [];
 
             for (const file of renamePendingFiles) {
                 const dotIndex = file.name.lastIndexOf('.');
                 const baseName = dotIndex > -1 ? file.name.slice(0, dotIndex) : file.name;
                 const ext = dotIndex > -1 ? file.name.slice(dotIndex + 1) : 'png';
-                let newName = `${baseName}_${suffixRaw}.${ext}`;
 
-                let counter = 1;
-                while (usedNames.has(newName)) {
-                    newName = `${baseName}_${suffixRaw}-${counter}.${ext}`;
-                    counter++;
+                for (const suffix of suffixes) {
+                    let newName = `${baseName}_${suffix}.${ext}`;
+                    let counter = 1;
+                    while (usedNames.has(newName)) {
+                        newName = `${baseName}_${suffix}-${counter}.${ext}`;
+                        counter++;
+                    }
+                    usedNames.add(newName);
+                    output.push({ file, name: newName });
                 }
-                usedNames.add(newName);
-
-                zip.file(newName, file);
             }
 
+            return output;
+        }
+
+        // --- Сохранение через File System Access API (выбор папки на диске) ---
+
+        async function saveViaDirectoryPicker(outputList) {
+            const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            let savedCount = 0;
+
+            for (const item of outputList) {
+                statusEl.textContent = `Сохраняем ${savedCount + 1} из ${outputList.length}...`;
+                const fileHandle = await dirHandle.getFileHandle(item.name, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(item.file);
+                await writable.close();
+                savedCount++;
+            }
+
+            return savedCount;
+        }
+
+        // --- Фолбэк: обычное скачивание каждого файла по отдельности ---
+        // (для браузеров без File System Access API, например Firefox/Safari)
+
+        async function saveViaDownloads(outputList) {
+            for (let i = 0; i < outputList.length; i++) {
+                const item = outputList[i];
+                statusEl.textContent = `Скачиваем ${i + 1} из ${outputList.length}...`;
+                triggerDownload(item.file, item.name);
+                // Небольшая пауза, чтобы браузер успевал обработать каждое скачивание
+                // и не блокировал их как "множественные автоматические загрузки".
+                await new Promise(res => setTimeout(res, 300));
+            }
+            return outputList.length;
+        }
+
+        saveBtn.addEventListener('click', async () => {
+            const suffixes = getSuffixes();
+            if (!suffixes.length) {
+                statusEl.textContent = 'Впишите хотя бы одну приставку перед сохранением.';
+                return;
+            }
+            if (!renamePendingFiles.length) return;
+
+            const outputList = buildOutputList(suffixes);
+
+            saveBtn.disabled = true;
+
             try {
-                const blob = await zip.generateAsync({ type: 'blob' });
-                triggerDownload(blob, `костюмы_${sanitizeFileName(suffixRaw)}.zip`);
-                statusEl.textContent = `Готово — ${renamePendingFiles.length} файл(ов) переименовано и упаковано.`;
+                if (supportsFsAccess) {
+                    statusEl.textContent = 'Выберите папку для сохранения...';
+                    const savedCount = await saveViaDirectoryPicker(outputList);
+                    statusEl.textContent = `Готово — сохранено ${savedCount} файл(ов) (приставки: ${suffixes.join(', ')}).`;
+                } else {
+                    statusEl.textContent = `Ваш браузер не поддерживает выбор папки напрямую — файлы будут скачаны по одному в папку загрузок (${outputList.length} шт).`;
+                    const savedCount = await saveViaDownloads(outputList);
+                    statusEl.textContent = `Готово — скачано ${savedCount} файл(ов) (приставки: ${suffixes.join(', ')}).`;
+                }
             } catch (err) {
-                statusEl.textContent = 'Не удалось собрать архив: ' + err.message;
+                if (err && err.name === 'AbortError') {
+                    statusEl.textContent = 'Сохранение отменено.';
+                } else {
+                    statusEl.textContent = 'Не удалось сохранить файлы: ' + err.message;
+                }
             } finally {
-                downloadBtn.disabled = false;
+                saveBtn.disabled = renamePendingFiles.length === 0;
             }
         });
     }
