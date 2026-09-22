@@ -111,13 +111,13 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
   <header class="site-header">
     <h1>Примерочная для пропусков</h1>
     <p class="lead">Автономная версия — работает как обычная веб-страница, без catwar.su и catwar.net. Открывайте файл в браузере или разместите его на любом хостинге.</p>
-    <p class="hint">Картинки моделек и деталей теперь берутся из локальной папки <code>img/</code> рядом с этим файлом — убедитесь, что она на месте (её можно собрать инструментом «Скачать картинки для img/» ниже, если их там ещё нет). Файлы костюмов можно перетаскивать прямо из проводника на нужные места. Кнопка «+» на модельке создаёт её копию.</p>
+    <p class="hint">Картинки берутся из папки img рядом с этим файлом. Файлы можно перетаскивать прямо из проводника на нужные места. Кнопка «+» на модельке создаёт её копию.</p>
   </header>
 
   <section class="tools-panel">
     <div class="tool-card">
-      <h2>Скачать картинки для img/</h2>
-      <p>Соберёт оригиналы картинок мода (сейчас на Dropbox) в один ZIP-архив с уже готовой структурой папок: <code>img/Аксессуары/…</code>, <code>img/Модели/…</code> и <code>img/Конструктор/…</code>. Распакуйте архив рядом с этим html-файлом (в корне репозитория) — он сам создаст папку <code>img/</code> с нужными подпапками и именами файлов. Если Dropbox заблокирует прямое скачивание, сайт попробует через прокси — сработает не всегда. Если часть файлов не скачается, надёжнее вариант — <code>download_all_images.py</code> (отдельный файл рядом с этой страницей).</p>
+      <h2>Скачать все картинки</h2>
+      <p>Соберёт все картинки мода в один ZIP-архив, разложенные по папкам: «Аксессуары» (по типу детали), «Модели» (по группе) и «Конструктор» (база).</p>
       <button id="download-all-zip" type="button">Скачать ZIP</button>
       <div id="download-all-status" class="tool-status" aria-live="polite"></div>
     </div>
@@ -142,7 +142,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
   <main id="models-container" class="panel"></main>
 
-  <footer>Локальный инструмент примерки. Картинки — из папки img/ рядом с этой страницей.</footer>
+  <footer>Локальный инструмент примерки. Картинки берутся из папки img этого репозитория.</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -150,136 +150,58 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 (function() {
     'use strict';
 
-    // === Настройка путей к картинкам ===
-    // Все изображения раскладываются в папке img/ рядом с этим html-файлом, по схеме:
-    //   img/Конструктор/база-конструктора.png            — база конструктора
-    //   img/Аксессуары/<Деталь>/<Вариант>.png             — детали конструктора (уши, хвост и т.д.)
-    //   img/Модели/<Группа>/<id модели>.png               — картинки готовых моделек
-    // Если понадобится не относительный путь, а полный (например, на другом хостинге),
-    // достаточно поменять IMG_BASE — остальной код трогать не придётся.
-    const IMG_BASE = "img/";
-
-    const C_BASE_PATH = IMG_BASE + "Конструктор/база-конструктора.png";
-    // Исходная ссылка (Dropbox) — нужна только инструменту "Скачать картинки для img/" ниже,
-    // чтобы один раз забрать оригинал и разложить его по нужной папке.
-    const C_BASE_SOURCE = "https://www.dropbox.com/scl/fi/q1ajez8cmzw6pftoqa6ub/1.png?rlkey=90mp96qo833kk9b63ponz52rn&st=ewbwsnej&raw=1";
+    const C_BASE_URL = "img/конструктор/основа1.png";
 
     const C_PARTS = {
-        'Хвост': { id: 'tail-layer', options: {
-            'куцый': IMG_BASE + 'Аксессуары/Хвост/куцый.png',
-            'беличий': IMG_BASE + 'Аксессуары/Хвост/беличий.png',
-            'пышный': IMG_BASE + 'Аксессуары/Хвост/пышный.png',
-            'пушистый': IMG_BASE + 'Аксессуары/Хвост/пушистый.png',
-            'умеренный': IMG_BASE + 'Аксессуары/Хвост/умеренный.png',
-            'гладкий': IMG_BASE + 'Аксессуары/Хвост/гладкий.png',
-            'тонкий': IMG_BASE + 'Аксессуары/Хвост/тонкий.png'
-        } },
-        'Грудь': { id: 'chest-layer', options: {
-            '1': '',
-            '2': IMG_BASE + 'Аксессуары/Грудь/2.png',
-            '3': IMG_BASE + 'Аксессуары/Грудь/3.png'
-        } },
-        'Грива': { id: 'mane-layer', options: {
-            '1': '',
-            '2': IMG_BASE + 'Аксессуары/Грива/2.png',
-            '3': IMG_BASE + 'Аксессуары/Грива/3.png',
-            '4': IMG_BASE + 'Аксессуары/Грива/4.png'
-        } },
-        'Щёки': { id: 'cheeks-layer', options: {
-            '0': IMG_BASE + 'Аксессуары/Щёки/0.png',
-            '1': IMG_BASE + 'Аксессуары/Щёки/1.png',
-            '2': IMG_BASE + 'Аксессуары/Щёки/2.png',
-            '3': IMG_BASE + 'Аксессуары/Щёки/3.png',
-            '4': IMG_BASE + 'Аксессуары/Щёки/4.png'
-        } },
-        'Уши': { id: 'ears-layer', options: {
-            'кёрл': IMG_BASE + 'Аксессуары/Уши/кёрл.png',
-            'торчком': IMG_BASE + 'Аксессуары/Уши/торчком.png',
-            'длинные': IMG_BASE + 'Аксессуары/Уши/длинные.png',
-            'вислые': IMG_BASE + 'Аксессуары/Уши/вислые.png',
-            'раскосые': IMG_BASE + 'Аксессуары/Уши/раскосые.png'
-        } }
-    };
-
-    // Оригинальные (Dropbox) ссылки на детали конструктора — та же структура,
-    // что и C_PARTS, только вместо локального пути указан исходный URL для скачивания.
-    const C_PARTS_SOURCES = {
-        'Хвост': {
-            'куцый': 'https://www.dropbox.com/scl/fi/nl0n4n3f71f3yffaxwtqs/.png?rlkey=ixa4r4utywn1z5jq1y1dfbao0&st=hcu6mvfk&raw=1',
-            'беличий': 'https://www.dropbox.com/scl/fi/fkyasezvu2kbet4513bcu/.png?rlkey=f6ak8uji5zzjey6i9b91axawk&st=w0nw05mb&raw=1',
-            'пышный': 'https://www.dropbox.com/scl/fi/5bx340099c5zbxv4i7v8n/1.png?rlkey=rpdfve71bmyth3vueoorb31z5&st=9njcy0t7&raw=1',
-            'пушистый': 'https://www.dropbox.com/scl/fi/kdu1dypzwsu41b45yw3kv/1.png?rlkey=sc7j6r2o7att52iwea4gfyu2q&st=1dqms1kk&raw=1',
-            'умеренный': 'https://www.dropbox.com/scl/fi/zvoq4txvbiteec7r0rdwt/.png?rlkey=57qjamqk55na7ag3acl5r23c5&st=fluiegho&raw=1',
-            'гладкий': 'https://www.dropbox.com/scl/fi/xr8rrsgq7huvj9a3td68a/.png?rlkey=bqgasm2c6ql1014zczyd95f6v&st=2usr8vud&raw=1',
-            'тонкий': 'https://www.dropbox.com/scl/fi/x7xvkeo0fdo9z9yd84y1p/.png?rlkey=atgszj2n9qjvr5nvm9bejn1ow&st=a9y7vtd1&raw=1'
-        },
-        'Грудь': {
-            '2': 'https://www.dropbox.com/scl/fi/uls8hdn9xvwzwuz4pkqjx/2.png?rlkey=30j3m3jlx2v6lsczir3b51efg&st=pzwvh7gg&raw=1',
-            '3': 'https://www.dropbox.com/scl/fi/nssj37bg9i3pbljmpxw3f/3.png?rlkey=2o7zwdgeuapummgkbuq6y78va&st=w5moqzvo&raw=1'
-        },
-        'Грива': {
-            '2': 'https://www.dropbox.com/scl/fi/4x3tkb34nwlb8mqdruxx1/1.png?rlkey=oiulbqu2y43ixbii8e22637ai&st=9ruvape0&raw=1',
-            '3': 'https://www.dropbox.com/scl/fi/huorx4nzg3jtn7nhzzg8u/2.png?rlkey=i6w0q6w7bpj9lf90pledjec9w&st=spuwppkn&raw=1',
-            '4': 'https://www.dropbox.com/scl/fi/zi0yp9q8mmucto6eiinsj/3.png?rlkey=2l56dpqwotig67k3eoiqe3dl1&st=upsdlml5&raw=1'
-        },
-        'Щёки': {
-            '0': 'https://www.dropbox.com/scl/fi/lh3zf81qv9gbm37xlnvq9/0.png?rlkey=onad971ewlp1535of7o2vspbs&st=gyo15gaf&raw=1',
-            '1': 'https://www.dropbox.com/scl/fi/n3qlkbykvi48ds0581c9u/1.png?rlkey=el5n0oisbk5sk8kiwo56pbbq6&st=qm86khss&raw=1',
-            '2': 'https://www.dropbox.com/scl/fi/grc0ku90m9068uuf9hdgb/2.png?rlkey=sf4q895ulpxvkanc0xfaq44bv&st=oo8jynlp&raw=1',
-            '3': 'https://www.dropbox.com/scl/fi/msbnbhxtxj7pn84zo38lu/3.png?rlkey=xuyomk7o569xh2kzznre8hkvb&st=alfguell&raw=1',
-            '4': 'https://www.dropbox.com/scl/fi/5ui7x0uax57zw9zdmx4ro/4.png?rlkey=efxixs95sz02o46yb0vlwmgdo&st=nfthf0bf&raw=1'
-        },
-        'Уши': {
-            'кёрл': 'https://www.dropbox.com/scl/fi/pxpqv10l9iu7kmghte6l0/.png?rlkey=w3pz4bs4gnsay2p1k8yhoc3xd&st=6sc78byo&raw=1',
-            'торчком': 'https://www.dropbox.com/scl/fi/b1hhvto2ln950p9cmbu8j/.png?rlkey=p563lgw663muz4zqh2w2kl346&st=052fw7hp&raw=1',
-            'длинные': 'https://www.dropbox.com/scl/fi/g8oo7f9j6kglyf3pbq92g/.png?rlkey=g6hz2dcjrsjjoul4zzfxpcemy&st=wnqqtier&raw=1',
-            'вислые': 'https://www.dropbox.com/scl/fi/wj7wabgr1rdec59ssy3p2/.png?rlkey=zch0z4kybq27qprrjx8gvwrjz&st=esfo4c6m&raw=1',
-            'раскосые': 'https://www.dropbox.com/scl/fi/ty4zahfodvxng1brozx0n/.png?rlkey=3wicb9536s89ovtkjy05afq2k&st=hay4d34v&raw=1'
-        }
+        'Хвост': { id: 'tail-layer', options: { 'куцый': 'img/конструктор/куцый.png', 'беличий': 'img/конструктор/беличий.png', 'пышный': 'img/конструктор/пышный1.png', 'пушистый': 'img/конструктор/пушистый1.png', 'умеренный': 'img/конструктор/умеренный.png', 'гладкий': 'img/конструктор/гладкий.png', 'тонкий': 'img/конструктор/тонкий.png' } },
+        'Грудь': { id: 'chest-layer', options: { '1': '', '2': 'img/конструктор/грудь2.png', '3': 'img/конструктор/грудь3.png' } },
+        'Грива': { id: 'mane-layer', options: { '1': '', '2': 'img/конструктор/грива1.png', '3': 'img/конструктор/грива2.png', '4': 'img/конструктор/грива3.png' } },
+        'Щёки': { id: 'cheeks-layer', options: { '0': 'img/конструктор/щёки0.png', '1': 'img/конструктор/щёки1.png','2': 'img/конструктор/щёки2.png', '3': 'img/конструктор/щёки3.png', '4': 'img/конструктор/щёки4.png' } },
+        'Уши': { id: 'ears-layer', options: { 'кёрл': 'img/конструктор/кёрл.png', 'торчком': 'img/конструктор/торчок.png', 'длинные': 'img/конструктор/длинные.png', 'вислые': 'img/конструктор/вислые.png', 'раскосые': 'img/конструктор/раскосые.png' } }
     };
 
     const MODELS_DATA = {
         'old-models-row': {
             header: 'Старая модель',
             models: [
-                { id: 'model-1', base: IMG_BASE + 'Модели/Старая-модель/model-1.png', source: 'https://www.dropbox.com/scl/fi/wlyq4sjsk0q4sne1fu0kj/.png?rlkey=afs2yqnwb6we94hmtkb0qsepe&st=3unqcq9q&raw=1', details: 'уши: прямые<br>хвост: куцый' },
-                { id: 'model-3', base: IMG_BASE + 'Модели/Старая-модель/model-3.png', source: 'https://www.dropbox.com/scl/fi/6ndhhj8yv31jfjuyg5029/.png?rlkey=ikgtj5cjv6ufg2nqlztx65y4g&st=awfvjvad&raw=1', details: 'уши: вислые<br>хвост: тонкий' },
-                { id: 'model-4', base: IMG_BASE + 'Модели/Старая-модель/model-4.png', source: 'https://www.dropbox.com/scl/fi/qpdabker9leroyupvgsnl/.png?rlkey=3lgjmhgqjwl83m0kpxkg4xd7u&st=49bvw51e&raw=1', details: 'уши: длинные<br>хвост: гладкий' },
-                { id: 'model-5', base: IMG_BASE + 'Модели/Старая-модель/model-5.png', source: 'https://www.dropbox.com/scl/fi/08nsd0yjnqfw5tieypzbh/.png?rlkey=weolcvlosiogz9hn2w7scfgzg&st=iwm458ch&raw=1', details: 'уши: раскосые<br>хвост: умеренный' },
-                { id: 'model-6', base: IMG_BASE + 'Модели/Старая-модель/model-6.png', source: 'https://www.dropbox.com/scl/fi/hjkt3g7gd8d1ga7ls30ik/.png?rlkey=7q3s78pvqs5dm3ohkrywhiebz&st=zo5cgf8h&raw=1', details: 'уши: кёрл<br>хвост: пушистый' },
-                { id: 'model-7', base: IMG_BASE + 'Модели/Старая-модель/model-7.png', source: 'https://www.dropbox.com/scl/fi/lyojldny6txjugrqhnuhb/1.png?rlkey=om8daxr0y9a7gm27h3l7jtxy3&st=p0ubs2w4&raw=1', details: 'щёки: 1<br>хвост: пышный' },
-                { id: 'model-8', base: IMG_BASE + 'Модели/Старая-модель/model-8.png', source: 'https://www.dropbox.com/scl/fi/oi7p7g92oztghdnizqgjk/2.png?rlkey=9eop0wxnk7g9gcme22ebv8m3b&st=n62mab4a&raw=1', details: 'щёки: 2<br>хвост: беличий' },
-                { id: 'model-9', base: IMG_BASE + 'Модели/Старая-модель/model-9.png', source: 'https://www.dropbox.com/scl/fi/bybupa4d2xj0k69qpxobz/3.png?rlkey=t11o0utvwbeouuw8diwba4kvk&st=64509rvz&raw=1', details: 'щёки: 3' },
-                { id: 'model-10', base: IMG_BASE + 'Модели/Старая-модель/model-10.png', source: 'https://www.dropbox.com/scl/fi/fghf9ksxbvyw5689x51br/.png?rlkey=s48vlheocuoduv1owx3btyg4g&st=8rp3n91m&raw=1', details: 'грива: умеренная' },
-                { id: 'model-11', base: IMG_BASE + 'Модели/Старая-модель/model-11.png', source: 'https://www.dropbox.com/scl/fi/d3950l8kvs42z8a7kuc65/.png?rlkey=ahqabr1toswrylu9wv5x0hjz5&st=02m58czl&raw=1', details: 'грива: пушистая' },
-                { id: 'model-12', base: IMG_BASE + 'Модели/Старая-модель/model-12.png', source: 'https://www.dropbox.com/scl/fi/owydsis1az4i0wbkq2mag/.png?rlkey=fnj3qcx3qmgiabxmgrrhsmanb&st=hinxdalu&raw=1', details: 'грива: пышная' },
-                { id: 'model-27-kit', base: IMG_BASE + 'Модели/Старая-модель/model-27-kit.png', source: 'https://www.dropbox.com/scl/fi/93uo8247tpy71c6jckjel/.png?rlkey=kghqz6kmkyxvufdyi0sy0ln0f&st=pfaiy5bv&raw=1', details: 'котёнок' },
+                { id: 'model-1', base: 'img/старая модель/прямые куцый.png', details: 'уши: прямые<br>хвост: куцый' },
+                { id: 'model-3', base: 'img/старая модель/вислые тонкий.png', details: 'уши: вислые<br>хвост: тонкий' },
+                { id: 'model-4', base: 'img/старая модель/длинные гладкий.png', details: 'уши: длинные<br>хвост: гладкий' },
+                { id: 'model-5', base: 'img/старая модель/раскосые умеренный.png', details: 'уши: раскосые<br>хвост: умеренный' },
+                { id: 'model-6', base: 'img/старая модель/кёрл пушистый.png', details: 'уши: кёрл<br>хвост: пушистый' },
+                { id: 'model-7', base: 'img/старая модель/щёки 1 пышный.png', details: 'щёки: 1<br>хвост: пышный' },
+                { id: 'model-8', base: 'img/старая модель/щёки 2 беличий.png', details: 'щёки: 2<br>хвост: беличий' },
+                { id: 'model-9', base: 'img/старая модель/щёки 3.png', details: 'щёки: 3' },
+                { id: 'model-10', base: 'img/старая модель/умеренная.png', details: 'грива: умеренная' },
+                { id: 'model-11', base: 'img/старая модель/умеренная (1).png', details: 'грива: пушистая' },
+                { id: 'model-12', base: 'img/старая модель/пышная.png', details: 'грива: пышная' },
+                { id: 'model-27-kit', base: 'img/старая модель/котёнок.png', details: 'котёнок' },
             ]
         },
         'uo-models-row': {
             header: 'УО',
             models: [
-                { id: 'model-19', base: IMG_BASE + 'Модели/УО/model-19.png', source: 'https://www.dropbox.com/scl/fi/w7tmcek5bfqql6021joie/maskarad.png?rlkey=52jtux6eqna4rypf14fy6fm3o&st=hjkce87o&raw=1', details: 'невская маскарадная' },
-                { id: 'model-27', base: IMG_BASE + 'Модели/УО/model-27.png', source: 'https://www.dropbox.com/scl/fi/i42hj70z937bs2n3edwka/pers.png?rlkey=wyiziqn3jd4vunrlm55dap71w&st=jbsf7erh&raw=1', details: 'перс' },
-                { id: 'model-20', base: IMG_BASE + 'Модели/УО/model-20.png', source: 'https://www.dropbox.com/scl/fi/a5f8y2rcmu1w417h3oqhg/leopard.png?rlkey=vjrrq0axmyjz4zu3dwzq6w0d2&st=40k5j7fm&raw=1', details: 'дымчатый леопард' },
-                { id: 'model-21', base: IMG_BASE + 'Модели/УО/model-21.png', source: 'https://www.dropbox.com/scl/fi/7qc350p9iywkygoupwkih/bengal.png?rlkey=ibvyk289cxrlm7psuydt2v4t0&st=j8bdn2i4&raw=1', details: 'бенгал' },
-                { id: 'model-22', base: IMG_BASE + 'Модели/УО/model-22.png', source: 'https://www.dropbox.com/scl/fi/cxxgqyxk087halrqf9bnl/point.png?rlkey=q52j22yhpebayvl1rdxwe40sr&st=dd8tw72x&raw=1', details: 'поинт' },
-                { id: 'model-26', base: IMG_BASE + 'Модели/УО/model-26.png', source: 'https://www.dropbox.com/scl/fi/qeouxi6ak5e87umy42dpd/sphinx.png?rlkey=e90p814ncv6544iuf04mtajgj&st=0ejf3w74&raw=1', details: 'сфинкс' },
-                { id: 'model-23', base: IMG_BASE + 'Модели/УО/model-23.png', source: 'https://www.dropbox.com/scl/fi/tneo695ww88a6tc9dq8bt/likoy.png?rlkey=akwbn9uyichxbywutm2m6ly0e&st=5iw2irtq&raw=1', details: 'ликой' },
-                { id: 'model-24', base: IMG_BASE + 'Модели/УО/model-24.png', source: 'https://www.dropbox.com/scl/fi/fiv9sjlvh41914wztokxy/oriental-47-48.png?rlkey=axmv19v8zoavpn1re3b7adjl8&st=37ciiaw6&raw=1', details: 'ориентал 47 48' },
-                { id: 'model-25', base: IMG_BASE + 'Модели/УО/model-25.png', source: 'https://www.dropbox.com/scl/fi/gwde6p0u1yb3wb0sxerei/oriental-45.png?rlkey=cq84o4oxgmwegqsphu6t9pqse&st=buh7ugle&raw=1', details: 'ориентал 45' },
+                { id: 'model-19', base: 'img/УО/maskarad.png', details: 'невская маскарадная' },
+                { id: 'model-27', base: 'img/УО/pers.png', details: 'перс' },
+                { id: 'model-20', base: 'img/УО/leopard.png', details: 'дымчатый леопард' },
+                { id: 'model-21', base: 'img/УО/bengal.png', details: 'бенгал' },
+                { id: 'model-22', base: 'img/УО/point.png', details: 'поинт' },
+                { id: 'model-26', base: 'img/УО/sphinx.png', details: 'сфинкс' },
+                { id: 'model-23', base: 'img/УО/likoy.png', details: 'ликой' },
+                { id: 'model-24', base: 'img/УО/oriental 47 48.png', details: 'ориентал 47 48' },
+                { id: 'model-25', base: 'img/УО/oriental 45.png', details: 'ориентал 45' },
             ]
         },
         'new-models-row': {
             header: 'Новая модель',
             models: [
-                { id: 'model-2', base: IMG_BASE + 'Модели/Новая-модель/model-2.png', source: 'https://www.dropbox.com/scl/fi/2enijdr5vfmvu2ifvp6gm/.png?rlkey=ylssgh0fjzbvmkndttqol1jz5&st=i43zm2at&raw=1', details: 'уши: кёрл<br>хвост: куцый' },
-                { id: 'model-13', base: IMG_BASE + 'Модели/Новая-модель/model-13.png', source: 'https://www.dropbox.com/scl/fi/fi0hffecfhhpmtdqx7srl/1.png?rlkey=sib1t158u19uryehqipd77j6b&st=fkejmzdm&raw=1', details: 'уши: торчком<br>щёки: 1<br>хвост: тонкий' },
-                { id: 'model-14', base: IMG_BASE + 'Модели/Новая-модель/model-14.png', source: 'https://www.dropbox.com/scl/fi/x6bc12i4wgc71ck24aic8/2.png?rlkey=vug91b5tq7jho8nt9415ie5vn&st=8ny1la5o&raw=1', details: 'уши: длинные<br>щёки: 2<br>хвост: гладкий' },
-                { id: 'model-15', base: IMG_BASE + 'Модели/Новая-модель/model-15.png', source: 'https://www.dropbox.com/scl/fi/arx4es371rqwx2iw34zt3/3.png?rlkey=9ocli8dy7uoxtw2mh9j5zgkrq&st=u9g7ooqy&raw=1', details: 'уши: вислые<br>щёки: 3<br>хвост: умеренный' },
-                { id: 'model-16', base: IMG_BASE + 'Модели/Новая-модель/model-16.png', source: 'https://www.dropbox.com/scl/fi/hx98yydc1n0fd43lhndk1/2-2.png?rlkey=dv351t71k2bpu8zcmq0opxkg9&st=oe2w457u&raw=1', details: 'уши: раскосые<br>грива: 2<br>грудь: 2<br>хвост: пушистый' },
-                { id: 'model-17', base: IMG_BASE + 'Модели/Новая-модель/model-17.png', source: 'https://www.dropbox.com/scl/fi/lwlkk5uc1tdm4fxnpmulm/3-3.png?rlkey=bri0j0phuqyd5ii7j2qm8jb7w&st=btzc6p72&raw=1', details: 'грива: 3<br>грудь: 3<br>хвост: пышный' },
-                { id: 'model-18', base: IMG_BASE + 'Модели/Новая-модель/model-18.png', source: 'https://www.dropbox.com/scl/fi/qmw6l50dfmy1eyf2cqr50/4.png?rlkey=i4ugf0a85u81i78bvmxmn9ugg&st=8ymnemts&raw=1', details: 'грива: 4<br>хвост: беличий' },
+                { id: 'model-2', base: 'img/новая модель/кёрл куцый.png', details: 'уши: кёрл<br>хвост: куцый' },
+                { id: 'model-13', base: 'img/новая модель/торчком 1 тонкий.png', details: 'уши: торчком<br>щёки: 1<br>хвост: тонкий' },
+                { id: 'model-14', base: 'img/новая модель/длинные 2 гладкий.png', details: 'уши: длинные<br>щёки: 2<br>хвост: гладкий' },
+                { id: 'model-15', base: 'img/новая модель/вислые 3 умеренный.png', details: 'уши: вислые<br>щёки: 3<br>хвост: умеренный' },
+                { id: 'model-16', base: 'img/новая модель/раскосые 2 2 пушистый.png', details: 'уши: раскосые<br>грива: 2<br>грудь: 2<br>хвост: пушистый' },
+                { id: 'model-17', base: 'img/новая модель/3 3 пышный.png', details: 'грива: 3<br>грудь: 3<br>хвост: пышный' },
+                { id: 'model-18', base: 'img/новая модель/4 беличий.png', details: 'грива: 4<br>хвост: беличий' },
             ]
         }
     };
@@ -320,7 +242,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     const constructorBlockHtml = `
         <div id="constructor-area-wrapper" class="model-section">
             <div id="constructor-model-container" class="model-wrapper" data-is-constructor="true">
-                <img src="${C_BASE_PATH}" alt="" class="constructor-base">
+                <img src="${C_BASE_URL}" alt="" class="constructor-base">
                 <img src="${getDefaultUrl(C_PARTS['Хвост'])}" alt="" class="constructor-layer" id="${C_PARTS['Хвост'].id}">
                 <img src="${getDefaultUrl(C_PARTS['Грудь'])}" alt="" class="constructor-layer" id="${C_PARTS['Грудь'].id}">
                 <img src="${getDefaultUrl(C_PARTS['Грива'])}" alt="" class="constructor-layer" id="${C_PARTS['Грива'].id}">
@@ -595,7 +517,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             <div class="model-section">
                 <div class="model-wrapper" data-model-id="saved-${index}">
                     <div id="saved-construct-display-${index}" style="position: relative; width: 100%; height: 100%;">
-                        <img src="${C_BASE_PATH}" alt="" class="constructor-base">
+                        <img src="${C_BASE_URL}" alt="" class="constructor-base">
                         ${modelLayers}
                         <img src="" alt="" class="overlay-costume" id="${costumeId}">
                         <input type="file" class="file-input" data-target-id="${costumeId}" accept="image/*" style="display:none;">
@@ -628,56 +550,42 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
-    // --- Скачать картинки для папки img/ (одноразовая миграция с Dropbox) ---
+    // --- Скачать все картинки ZIP-архивом, разложенные по папкам ---
 
     async function fetchImageBlob(url) {
-        const attempts = [
-            url,
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            `https://corsproxy.io/?url=${encodeURIComponent(url)}`
-        ];
-        let lastError = new Error('Не удалось скачать');
-        for (const attemptUrl of attempts) {
-            try {
-                const response = await fetch(attemptUrl);
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                const blob = await response.blob();
-                if (blob && blob.size > 0) return blob;
-                throw new Error('Пустой файл');
-            } catch (err) {
-                lastError = err;
-            }
-        }
-        throw lastError;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const blob = await response.blob();
+        if (!blob || blob.size === 0) throw new Error('Пустой файл');
+        return blob;
     }
 
-    function buildMigrationManifest() {
+    function buildImageManifest() {
         const entries = [];
 
         entries.push({
-            source: C_BASE_SOURCE,
-            zipPath: C_BASE_PATH
+            url: C_BASE_URL,
+            folder: 'Конструктор',
+            fileName: 'база-конструктора.png'
         });
 
         for (const [partLabel, config] of Object.entries(C_PARTS)) {
-            const sources = C_PARTS_SOURCES[partLabel] || {};
-            for (const [optionName, localPath] of Object.entries(config.options)) {
-                if (!localPath) continue;
-                const sourceUrl = sources[optionName];
-                if (!sourceUrl) continue;
+            for (const [optionName, url] of Object.entries(config.options)) {
+                if (!url) continue;
                 entries.push({
-                    source: sourceUrl,
-                    zipPath: localPath
+                    url,
+                    folder: `Аксессуары/${sanitizeFileName(partLabel)}`,
+                    fileName: `${sanitizeFileName(optionName)}.png`
                 });
             }
         }
 
         for (const groupData of Object.values(MODELS_DATA)) {
             for (const model of groupData.models) {
-                if (!model.source) continue;
                 entries.push({
-                    source: model.source,
-                    zipPath: model.base
+                    url: model.base,
+                    folder: `Модели/${sanitizeFileName(groupData.header)}`,
+                    fileName: `${model.id}_${sanitizeFileName(model.details)}.png`
                 });
             }
         }
@@ -695,7 +603,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             return;
         }
 
-        const manifest = buildMigrationManifest();
+        const manifest = buildImageManifest();
         const zip = new JSZip();
         const failed = [];
 
@@ -705,22 +613,21 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             const item = manifest[i];
             statusEl.textContent = `Скачивание ${i + 1} из ${manifest.length}...`;
             try {
-                const blob = await fetchImageBlob(item.source);
-                zip.file(item.zipPath, blob);
+                const blob = await fetchImageBlob(item.url);
+                zip.folder(item.folder).file(item.fileName, blob);
             } catch (err) {
-                failed.push(item.zipPath);
+                failed.push(`${item.folder}/${item.fileName}`);
             }
-            await new Promise(resolve => setTimeout(resolve, 150));
         }
 
         statusEl.textContent = 'Формируем архив...';
 
         try {
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            triggerDownload(zipBlob, 'img.zip');
+            triggerDownload(zipBlob, 'картинки-мода.zip');
             statusEl.textContent = failed.length
-                ? `Готово, но ${failed.length} файл(ов) не удалось скачать (вероятно, из-за ограничений Dropbox на кросс-доменные запросы): ${failed.join(', ')}`
-                : 'Готово — распакуйте архив рядом с этой страницей (он сам создаст папку img/).';
+                ? `Готово, но ${failed.length} файл(ов) не удалось скачать: ${failed.join(', ')}`
+                : 'Готово — все картинки в архиве.';
         } catch (err) {
             statusEl.textContent = 'Не удалось собрать архив: ' + err.message;
         } finally {
