@@ -127,6 +127,14 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
   <section class="tools-panel">
     <div class="tool-card">
+      <h2>Сверить папки</h2>
+      <p>Выберите две папки, чтобы сравнить список файлов и найти расхождения в названиях.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+        <button type="button" id="dir-check-btn">Выбрать</button>
+      </div>
+      <div id="dir-check-status" class="tool-status" aria-live="polite" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 6px; max-height: 200px; overflow-y: auto;"></div>
+    </div>
+    <div class="tool-card">
       <h2>Проверить пиксели</h2>
       <p>Проверка чистоты изображения маской.</p>
       <div id="pixel-dropzone" class="rename-dropzone">
@@ -274,6 +282,62 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             ]
         }
     };
+
+  // --- Проверка соответствия файлов в двух папках ---
+    function initDirCheckTool() {
+        const checkBtn = document.getElementById('dir-check-btn');
+        const statusEl = document.getElementById('dir-check-status');
+
+        if (!checkBtn || !statusEl) return;
+
+        checkBtn.addEventListener('click', async () => {
+            if (typeof window.showDirectoryPicker !== 'function') {
+                statusEl.textContent = 'Ваш браузер не поддерживает выбор папок напрямую (попробуйте Chrome, Edge или Yandex).';
+                return;
+            }
+
+            try {
+                statusEl.textContent = 'Выберите первую папку...';
+                const dir1Handle = await window.showDirectoryPicker();
+                statusEl.textContent = 'Выберите вторую папку...';
+                const dir2Handle = await window.showDirectoryPicker();
+
+                statusEl.textContent = 'Сравниваем файлы...';
+
+                const files1 = new Set();
+                const files2 = new Set();
+
+                for await (const entry of dir1Handle.values()) {
+                    if (entry.kind === 'file') files1.add(entry.name);
+                }
+                for await (const entry of dir2Handle.values()) {
+                    if (entry.kind === 'file') files2.add(entry.name);
+                }
+
+                const missingIn2 = [...files1].filter(f => !files2.has(f));
+                const missingIn1 = [...files2].filter(f => !files1.has(f));
+
+                if (missingIn2.length === 0 && missingIn1.length === 0) {
+                    statusEl.textContent = `✅ Папки идеально совпадают!\nВсего файлов: ${files1.size}`;
+                } else {
+                    let res = `❌ Найдены несоответствия:\n\n`;
+                    if (missingIn2.length > 0) {
+                        res += `Есть в "${dir1Handle.name}", но НЕТ в "${dir2Handle.name}":\n` + missingIn2.map(f => ` - ${f}`).join('\n') + '\n\n';
+                    }
+                    if (missingIn1.length > 0) {
+                        res += `Есть в "${dir2Handle.name}", но НЕТ в "${dir1Handle.name}":\n` + missingIn1.map(f => ` - ${f}`).join('\n');
+                    }
+                    statusEl.textContent = res.trim();
+                }
+            } catch (err) {
+                if (err && err.name === 'AbortError') {
+                    statusEl.textContent = 'Отменено пользователем.';
+                } else {
+                    statusEl.textContent = 'Ошибка при чтении папок: ' + err.message;
+                }
+            }
+        });
+    }
 
     function createSelectOptions(options) {
         let html = '';
@@ -789,7 +853,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
         function updateRemoveButtonsState() {
             const rows = suffixListEl.querySelectorAll('.rename-suffix-row');
-            // Не даём убрать последнюю оставшуюся строку — приставка должна быть хотя бы одна.
             rows.forEach(row => {
                 const btn = row.querySelector('button');
                 if (btn) btn.disabled = rows.length <= 1;
@@ -803,15 +866,12 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 const v = inp.value.trim();
                 if (v) values.push(v);
             });
-            // Убираем дубликаты, сохраняя порядок.
             return [...new Set(values)];
         }
 
         addSuffixBtn.addEventListener('click', () => addSuffixRow(''));
-        addSuffixRow(''); // первая строка по умолчанию
-
-        // --- Управление списком файлов ---
-
+        addSuffixRow('');
+      
         function addFiles(fileArray) {
             for (const f of fileArray) {
                 if (f && f.type.startsWith('image/')) {
@@ -861,8 +921,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             }
         });
 
-        // --- Построение списка результирующих файлов: каждый исходник x каждая приставка ---
-
         function buildOutputList(suffixes) {
             const usedNames = new Set();
             const output = [];
@@ -887,8 +945,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             return output;
         }
 
-        // --- Сохранение через File System Access API (выбор папки на диске) ---
-
         async function saveViaDirectoryPicker(outputList) {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             let savedCount = 0;
@@ -905,16 +961,11 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             return savedCount;
         }
 
-        // --- Фолбэк: обычное скачивание каждого файла по отдельности ---
-        // (для браузеров без File System Access API, например Firefox/Safari)
-
         async function saveViaDownloads(outputList) {
             for (let i = 0; i < outputList.length; i++) {
                 const item = outputList[i];
                 statusEl.textContent = `Скачиваем ${i + 1} из ${outputList.length}...`;
                 triggerDownload(item.file, item.name);
-                // Небольшая пауза, чтобы браузер успевал обработать каждое скачивание
-                // и не блокировал их как "множественные автоматические загрузки".
                 await new Promise(res => setTimeout(res, 300));
             }
             return outputList.length;
@@ -964,6 +1015,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         initializeConstructor();
         initPixelTool();
         initRenameTool();
+        initDirCheckTool();
     }
 
     if (document.readyState === 'loading') {
