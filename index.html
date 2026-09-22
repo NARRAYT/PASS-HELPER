@@ -128,9 +128,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
   <section class="tools-panel">
     <div class="tool-card">
       <h2>Проверить пиксели</h2>
-      <p>Загруженная картинка превращается в маску: непрозрачные пиксели рисуются цветом маски, прозрачные — цветом фона, а полупрозрачные — смешением. Так видно все прозрачности на картинке. Результат показывается только на экране, скачивать его не нужно.</p>
+      <p>Проверка чистоты изображения маской.</p>
       <div id="pixel-dropzone" class="rename-dropzone">
-        <p>Перетащите картинку сюда или выберите вручную</p>
         <input type="file" id="pixel-file-input" accept="image/*" style="display:none;">
         <button type="button" id="pixel-browse-button">Выбрать файл</button>
       </div>
@@ -150,14 +149,13 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     <div class="tool-card">
       <h2>Сохранить костюмы с приставкой</h2>
-      <p>Загрузите несколько PNG/JPG, впишите одну или несколько приставок — каждая картинка сохранится в стольких копиях, сколько приставок вы укажете: <code>имя_приставка.png</code>. Перед сохранением нужно выбрать папку на диске.</p>
+      <p>Быстрое дублирование файлов с автоматической подстановкой приставки. Загрузите базовые файлы и напишите нужные приставки, затем сохраните.</p>
       <div class="rename-controls">
         <label>Приставки</label>
         <div id="rename-suffix-list" class="rename-suffix-list"></div>
         <button type="button" id="rename-add-suffix" class="rename-add-suffix">+ добавить приставку</button>
       </div>
       <div id="rename-dropzone" class="rename-dropzone">
-        <p>Перетащите файлы сюда или выберите вручную</p>
         <input type="file" id="rename-file-input" accept="image/*" multiple style="display:none;">
         <button type="button" id="rename-browse-button">Выбрать файлы</button>
       </div>
@@ -168,8 +166,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
   </section>
 
   <main id="models-container" class="panel"></main>
-
-  <footer>Локальный инструмент примерки. Картинки берутся из папки img этого репозитория.</footer>
 </div>
 
 <script>
