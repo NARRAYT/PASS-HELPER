@@ -693,8 +693,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         function loadFile(file) {
             if (!file || !file.type.startsWith('image/')) return;
 
-            statusEl.textContent = 'Загружаем картинку...';
-
             const reader = new FileReader();
             reader.onload = function(event) {
                 const img = new Image();
