@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Примерочная для пропусков</title>
 <style>
 :root{
@@ -108,6 +108,7 @@ body{
 .pixel-colors label{font-size:.8rem;font-weight:600;display:flex;flex-direction:column;gap:4px;}
 .pixel-colors input[type="color"]{width:48px;height:32px;padding:0;border:1px solid var(--accent);border-radius:4px;cursor:pointer;background:none;}
 .pixel-canvas{display:block;max-width:100%;margin:0 0 14px;border:1px solid var(--accent);border-radius:6px;background-color:var(--card);}
+.pixel-canvas-wrap{overflow-x:auto;margin:0 0 14px;}
 
 footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,.45);}
 
@@ -129,7 +130,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
   <section class="tools-panel">
     <div class="tool-card">
       <h2>Проверить пиксели</h2>
-      <p>Загруженная картинка превращается в маску: непрозрачные пиксели рисуются цветом маски, прозрачные — цветом фона, а полупрозрачные — смешением. Так видно все прозрачности на картинке.</p>
+      <p>Загруженная картинка превращается в маску: непрозрачные пиксели рисуются цветом маски, прозрачные — цветом фона, а полупрозрачные — смешением. Так видно все прозрачности на картинке. Результат показывается только на экране, скачивать его не нужно.</p>
       <div id="pixel-dropzone" class="rename-dropzone">
         <p>Перетащите картинку сюда или выберите вручную</p>
         <input type="file" id="pixel-file-input" accept="image/*" style="display:none;">
@@ -143,8 +144,9 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
           <input type="color" id="pixel-bg-color" value="#ffffff">
         </label>
       </div>
-      <canvas id="pixel-canvas" class="pixel-canvas" style="display:none;"></canvas>
-      <button id="pixel-download" type="button" disabled>Скачать результат</button>
+      <div class="pixel-canvas-wrap">
+        <canvas id="pixel-canvas" class="pixel-canvas" style="display:none;"></canvas>
+      </div>
       <div id="pixel-status" class="tool-status" aria-live="polite"></div>
     </div>
 
@@ -641,6 +643,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     }
 
     // --- Проверить пиксели: показать альфа-канал картинки как маску на фоне ---
+    // Только визуальная проверка в браузере, без скачивания результата.
 
     function hexToRgb(hex) {
         const clean = hex.replace('#', '');
@@ -652,7 +655,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     }
 
     let pixelOriginalImageData = null;
-    let pixelOriginalFileName = 'картинка';
 
     function initPixelTool() {
         const dropzone = document.getElementById('pixel-dropzone');
@@ -661,10 +663,9 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         const maskColorInput = document.getElementById('pixel-mask-color');
         const bgColorInput = document.getElementById('pixel-bg-color');
         const canvas = document.getElementById('pixel-canvas');
-        const downloadBtn = document.getElementById('pixel-download');
         const statusEl = document.getElementById('pixel-status');
 
-        if (!dropzone || !fileInput || !browseBtn || !maskColorInput || !bgColorInput || !canvas || !downloadBtn || !statusEl) return;
+        if (!dropzone || !fileInput || !browseBtn || !maskColorInput || !bgColorInput || !canvas || !statusEl) return;
 
         const ctx = canvas.getContext('2d');
 
@@ -694,7 +695,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         function loadFile(file) {
             if (!file || !file.type.startsWith('image/')) return;
 
-            pixelOriginalFileName = file.name.replace(/\.[^.]+$/, '') || 'картинка';
             statusEl.textContent = 'Загружаем картинку...';
 
             const reader = new FileReader();
@@ -709,7 +709,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
                     pixelOriginalImageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
                     canvas.style.display = 'block';
-                    downloadBtn.disabled = false;
                     statusEl.textContent = `Готово — ${tempCanvas.width}×${tempCanvas.height}px.`;
                     renderMask();
                 };
@@ -746,12 +745,6 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
         maskColorInput.addEventListener('input', renderMask);
         bgColorInput.addEventListener('input', renderMask);
-
-        downloadBtn.addEventListener('click', () => {
-            canvas.toBlob((blob) => {
-                if (blob) triggerDownload(blob, `${pixelOriginalFileName}_маска.png`);
-            }, 'image/png');
-        });
     }
 
     // --- Сохранить костюмы с приставкой(ами) в названии ---
@@ -978,11 +971,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         setInitialConstructorValues();
         initializeEventListenersAndDragAndDrop();
         initializeConstructor();
-
-        const downloadAllButton = document.getElementById('download-all-zip');
-        if (downloadAllButton) {
-            downloadAllButton.addEventListener('click', downloadAllAsZip);
-        }
+        initPixelTool();
         initRenameTool();
     }
 
