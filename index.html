@@ -145,6 +145,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
       <div class="pixel-canvas-wrap">
         <canvas id="pixel-canvas" class="pixel-canvas" style="display:none;"></canvas>
       </div>
+      <div id="pixel-status" class="tool-status" aria-live="polite"></div>
     </div>
 
     <div class="tool-card">
@@ -660,6 +661,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         const maskColorInput = document.getElementById('pixel-mask-color');
         const bgColorInput = document.getElementById('pixel-bg-color');
         const canvas = document.getElementById('pixel-canvas');
+        const statusEl = document.getElementById('pixel-status');
 
         if (!dropzone || !fileInput || !browseBtn || !maskColorInput || !bgColorInput || !canvas || !statusEl) return;
 
@@ -690,6 +692,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
         function loadFile(file) {
             if (!file || !file.type.startsWith('image/')) return;
+
+            statusEl.textContent = 'Загружаем картинку...';
 
             const reader = new FileReader();
             reader.onload = function(event) {
