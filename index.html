@@ -94,6 +94,33 @@ body{
 .rename-suffix-row button:disabled{opacity:.35;cursor:not-allowed;background:none;color:var(--accent);}
 .rename-add-suffix{align-self:flex-start;padding:4px 10px;border-radius:4px;font-size:.8rem;background-color:var(--tan);color:#fff;border:none;cursor:pointer;font-weight:700;}
 .rename-add-suffix:hover{background-color:var(--accent-hover);}
+.rename-remove-btn {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 700;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rename-remove-btn:hover {
+  background-color: var(--accent);
+  color: #fff;
+}
+.rename-remove-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  background: none;
+  color: var(--accent);
+}
 
 .rename-dropzone{border:2px dashed var(--accent);border-radius:8px;padding:18px;text-align:center;margin-bottom:12px;background-color:var(--card);}
 .rename-dropzone.drag-over{border-color:#fff;background-color:var(--tan);}
@@ -345,9 +372,9 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
+            removeBtn.className = 'rename-remove-btn';
             removeBtn.textContent = '✕';
             removeBtn.title = 'Удалить';
-            removeBtn.style.cssText = 'padding: 4px 6px; font-size: 0.75rem; border-radius: 4px; background: none; border: 1px solid var(--accent); color: var(--accent);';
             removeBtn.addEventListener('click', () => {
                 row.remove();
                 updateRemoveButtons();
@@ -943,6 +970,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
+            removeBtn.className = 'rename-remove-btn';
             removeBtn.textContent = '✕';
             removeBtn.title = 'Убрать приставку';
             removeBtn.addEventListener('click', () => {
@@ -996,7 +1024,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
                 removeBtn.textContent = '✕';
-                removeBtn.title = 'Убрать файл';
+                removeBtn.title = 'Удалить';
                 removeBtn.addEventListener('click', () => {
                     renamePendingFiles.splice(idx, 1);
                     renderFileList();
