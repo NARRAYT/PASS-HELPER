@@ -1411,7 +1411,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                     }
 
                     if (cmp.diffPercent > tolerance) {
-                        issues.push(`   ${item.color} — ${cmp.diffCount} пикс. (${cmp.diffPercent.toFixed(1)}%)`);
+                        issues.push(`   ${item.color}`);
                     }
                 }
 
@@ -1422,7 +1422,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 } else {
                     groupsOk++;
                     const colorsWord = pluralizeRu(group.items.length, ['цвет', 'цвета', 'цветов']);
-                    reportLines.push(`✅ ${group.type} | ${group.version} — ${group.items.length} ${colorsWord} совпадают`);
+                    reportLines.push(`✅ ${group.type} | ${group.version} — ${group.items.length} ${colorsWord}, версии совпадают`);
                 }
             }
 
