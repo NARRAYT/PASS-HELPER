@@ -230,6 +230,23 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
       <button id="rename-save-files" type="button" disabled>Сохранить в папку</button>
       <div id="rename-status" class="tool-status" aria-live="polite"></div>
     </div>
+
+    <div class="tool-card">
+      <h2>Сверить версии по цветам</h2>
+      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать.</p>
+      <div id="version-check-dropzone" class="rename-dropzone">
+        <p>Перетащите файлы сюда или выберите вручную</p>
+        <input type="file" id="version-check-file-input" accept="image/*" multiple style="display:none;">
+        <button type="button" id="version-check-browse-button">Выбрать файлы</button>
+      </div>
+      <ul id="version-check-file-list" class="rename-file-list"></ul>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;margin-bottom:12px;">
+        Допустимый % несовпадающих пикселей:
+        <input type="number" id="version-tolerance-input" value="0" min="0" max="100" step="0.1" style="width:60px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
+      </label>
+      <button type="button" id="version-check-run-btn" disabled>Сверить версии</button>
+      <div id="version-check-status" class="tool-status" aria-live="polite" style="white-space:pre-wrap;font-family:monospace;font-size:.8rem;background:rgba(0,0,0,0.05);padding:8px;border-radius:6px;max-height:280px;overflow-y:auto;"></div>
+    </div>
   </section>
 
   <main id="models-container" class="panel"></main>
@@ -1158,6 +1175,235 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         });
     }
 
+    // --- Сверить версии по цветам ---
+    // Название файла: тип_цвет_версия (версия может отсутствовать — тогда это "база").
+    // Группировка идёт по (тип + версия), цвет игнорируется: предполагается, что один и тот же
+    // "крой" костюма для конкретной версии перекрашивается в разные цвета, а силуэт
+    // (прозрачные/закрашенные пиксели) при этом меняться не должен.
+
+    let versionCheckFiles = [];
+
+    function parseCostumeFileName(nameNoExt) {
+        const cleanParts = nameNoExt.split('_').map(p => p.trim()).filter(p => p !== '');
+        if (cleanParts.length < 2) return null;
+
+        const type = cleanParts[0];
+        const color = cleanParts[1];
+        const version = cleanParts.slice(2).join('_').trim() || 'база';
+
+        return { type, color, version };
+    }
+
+    function loadImageMaskData(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    try {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        resolve({ width: canvas.width, height: canvas.height, data: imageData.data });
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                img.onerror = function() {
+                    reject(new Error('не удалось декодировать изображение'));
+                };
+                img.src = event.target.result;
+            };
+            reader.onerror = function() {
+                reject(new Error('не удалось прочитать файл'));
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function compareCostumeMasks(ref, cmp) {
+        if (ref.width !== cmp.width || ref.height !== cmp.height) {
+            return { sizeMismatch: true, refSize: [ref.width, ref.height], cmpSize: [cmp.width, cmp.height] };
+        }
+
+        const a = ref.data, b = cmp.data;
+        const totalPixels = ref.width * ref.height;
+        let diffCount = 0;
+
+        for (let i = 0; i < a.length; i += 4) {
+            const aFilled = a[i + 3] > 0;
+            const bFilled = b[i + 3] > 0;
+            if (aFilled !== bFilled) diffCount++;
+        }
+
+        return {
+            sizeMismatch: false,
+            diffCount,
+            totalPixels,
+            diffPercent: totalPixels ? (diffCount / totalPixels * 100) : 0
+        };
+    }
+
+    function initVersionCheckTool() {
+        const dropzone = document.getElementById('version-check-dropzone');
+        const fileInput = document.getElementById('version-check-file-input');
+        const browseBtn = document.getElementById('version-check-browse-button');
+        const listEl = document.getElementById('version-check-file-list');
+        const runBtn = document.getElementById('version-check-run-btn');
+        const statusEl = document.getElementById('version-check-status');
+        const toleranceInput = document.getElementById('version-tolerance-input');
+
+        if (!dropzone || !fileInput || !browseBtn || !listEl || !runBtn || !statusEl || !toleranceInput) return;
+
+        function addFiles(fileArray) {
+            for (const f of fileArray) {
+                if (f && f.type.startsWith('image/')) versionCheckFiles.push(f);
+            }
+            renderFileList();
+        }
+
+        function renderFileList() {
+            listEl.innerHTML = '';
+            versionCheckFiles.forEach((f, idx) => {
+                const li = document.createElement('li');
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = f.name;
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = '✕';
+                removeBtn.title = 'Удалить';
+                removeBtn.addEventListener('click', () => {
+                    versionCheckFiles.splice(idx, 1);
+                    renderFileList();
+                });
+                li.appendChild(nameSpan);
+                li.appendChild(removeBtn);
+                listEl.appendChild(li);
+            });
+            runBtn.disabled = versionCheckFiles.length === 0;
+        }
+
+        browseBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            addFiles(Array.from(e.target.files));
+            fileInput.value = '';
+        });
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('drag-over');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('drag-over');
+            if (e.dataTransfer && e.dataTransfer.files.length) {
+                addFiles(Array.from(e.dataTransfer.files));
+            }
+        });
+
+        runBtn.addEventListener('click', async () => {
+            if (!versionCheckFiles.length) return;
+
+            runBtn.disabled = true;
+            statusEl.textContent = 'Разбор названий файлов...';
+
+            const tolerance = Math.max(0, Math.min(100, parseFloat(toleranceInput.value) || 0));
+
+            // Группировка: тип + версия -> список файлов в разных цветах
+            const groups = new Map();
+            const skipped = [];
+
+            for (const file of versionCheckFiles) {
+                const dotIndex = file.name.lastIndexOf('.');
+                const nameNoExt = dotIndex > -1 ? file.name.slice(0, dotIndex) : file.name;
+                const parsed = parseCostumeFileName(nameNoExt);
+
+                if (!parsed) {
+                    skipped.push(file.name);
+                    continue;
+                }
+
+                const groupKey = `${parsed.type}||${parsed.version}`;
+                if (!groups.has(groupKey)) {
+                    groups.set(groupKey, { type: parsed.type, version: parsed.version, items: [] });
+                }
+                groups.get(groupKey).items.push({ file, color: parsed.color });
+            }
+
+            const sortedGroupKeys = Array.from(groups.keys()).sort();
+            const totalToProcess = sortedGroupKeys.reduce((sum, key) => {
+                const g = groups.get(key);
+                return sum + (g.items.length > 1 ? g.items.length : 0);
+            }, 0);
+
+            const reportLines = [];
+            let processedCount = 0;
+            let groupsOk = 0;
+            let groupsWithIssues = 0;
+            let groupsSkippedSingle = 0;
+
+            for (const key of sortedGroupKeys) {
+                const group = groups.get(key);
+
+                if (group.items.length < 2) {
+                    groupsSkippedSingle++;
+                    continue;
+                }
+
+                statusEl.textContent = `Обработка группы «${group.type} | ${group.version}»... (${processedCount} из ${totalToProcess})`;
+
+                let maskData;
+                try {
+                    maskData = await Promise.all(group.items.map(item => loadImageMaskData(item.file)));
+                } catch (err) {
+                    groupsWithIssues++;
+                    reportLines.push(`⚠️ ${group.type} | ${group.version}: ошибка чтения файлов (${err.message})`);
+                    continue;
+                }
+
+                processedCount += group.items.length;
+
+                const refMask = maskData[0];
+                const refItem = group.items[0];
+                const issues = [];
+
+                for (let i = 1; i < group.items.length; i++) {
+                    const cmp = compareCostumeMasks(refMask, maskData[i]);
+                    const item = group.items[i];
+
+                    if (cmp.sizeMismatch) {
+                        issues.push(`  - "${item.file.name}" (${cmp.cmpSize[0]}x${cmp.cmpSize[1]}) не совпадает по размеру с эталоном "${refItem.file.name}" (${cmp.refSize[0]}x${cmp.refSize[1]})`);
+                        continue;
+                    }
+
+                    if (cmp.diffPercent > tolerance) {
+                        issues.push(`  - "${item.file.name}" (цвет: ${item.color}) отличается от эталона "${refItem.file.name}" (цвет: ${refItem.color}): ${cmp.diffCount} пикс. (${cmp.diffPercent.toFixed(2)}%)`);
+                    }
+                }
+
+                if (issues.length) {
+                    groupsWithIssues++;
+                    reportLines.push(`❌ ${group.type} | ${group.version} (эталон: цвет "${refItem.color}"):`);
+                    reportLines.push(...issues);
+                } else {
+                    groupsOk++;
+                    reportLines.push(`✅ ${group.type} | ${group.version}: ${group.items.length} цвет(а/ов) — силуэты совпадают`);
+                }
+            }
+
+            let summary = `Готово. Групп с 2+ файлами: ${groupsOk + groupsWithIssues} (ок: ${groupsOk}, с несовпадениями: ${groupsWithIssues}).`;
+            if (groupsSkippedSingle) summary += ` Групп из 1 файла (пропущены): ${groupsSkippedSingle}.`;
+            if (skipped.length) summary += ` Не разобрано названий (нет "тип_цвет"): ${skipped.length} — ${skipped.join(', ')}.`;
+
+            statusEl.textContent = summary + (reportLines.length ? ('\n\n' + reportLines.join('\n')) : '');
+            runBtn.disabled = versionCheckFiles.length === 0;
+        });
+    }
+
     function init() {
         const modelsContainer = document.getElementById('models-container');
         if (modelsContainer) {
@@ -1169,6 +1415,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         initPixelTool();
         initRenameTool();
         initDirCheckTool();
+        initVersionCheckTool();
     }
 
     if (document.readyState === 'loading') {
