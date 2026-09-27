@@ -237,7 +237,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     <div class="tool-card">
       <h2>Сверить версии по цветам</h2>
-      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать. Разница измеряется в пикселях: если силуэт просто чуть толще/тоньше (сместился на N px по краю) — показывается разница в px; если где-то деталь выходит далеко за пределы силуэта эталона (силуэты принципиально разные) — версии помечаются как несовпадающие.</p>
+      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать. Разница измеряется в пикселях: если силуэт просто чуть толще/тоньше (сместился на N px по краю) — показывается разница в px; если разница 5px и более — версии автоматически помечаются как несовпадающие (силуэты принципиально разные).</p>
       <div id="version-check-dropzone" class="rename-dropzone">
         <p>Перетащите файлы сюда или выберите вручную</p>
         <input type="file" id="version-check-file-input" accept="image/*" multiple style="display:none;">
@@ -249,12 +249,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
           Норма (px):
           <input type="number" id="version-tolerance-input" value="1" min="0" max="50" step="1" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
         </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;">
-          Порог «версии не совпадают» (px):
-          <input type="number" id="version-mismatch-threshold-input" value="5" min="1" max="50" step="1" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
-        </label>
       </div>
-      <p style="margin:-6px 0 12px;font-size:.75rem;color:rgba(52,30,15,.65);">«Норма» — до скольких px разница считается просто сглаживанием/более толстым контуром и не отмечается. «Порог» — начиная с какого px расхождение уже не «толще контур», а другая версия (силуэты сравниваются только до этого радиуса — если не сошлись, значит совсем разные).</p>
+      <p style="margin:-6px 0 12px;font-size:.75rem;color:rgba(52,30,15,.65);">«Норма» — до скольких px разница считается просто сглаживанием/более толстым контуром и не отмечается. Начиная с 5px расхождение уже считается не «толще контур», а другой версией (силуэты сравниваются только до этого радиуса — если не сошлись, значит совсем разные).</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" id="version-check-run-btn" disabled>Сверить версии</button>
         <button type="button" id="version-check-clear-files" class="rename-add-suffix">Очистить список</button>
@@ -1202,6 +1198,10 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
     // "крой" костюма для конкретной версии перекрашивается в разные цвета, а силуэт
     // (прозрачные/закрашенные пиксели) при этом меняться не должен.
 
+    // Начиная с какого радиуса (px) расхождение силуэтов уже считается не "толще контур",
+    // а принципиально другой версией. Зафиксировано жёстко, без настройки пользователем.
+    const VERSION_MISMATCH_THRESHOLD_PX = 5;
+
     let versionCheckFiles = [];
 
     function parseCostumeFileName(nameNoExt) {
@@ -1355,9 +1355,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         const clearBtn = document.getElementById('version-check-clear-files');
         const statusEl = document.getElementById('version-check-status');
         const toleranceInput = document.getElementById('version-tolerance-input');
-        const mismatchThresholdInput = document.getElementById('version-mismatch-threshold-input');
 
-        if (!dropzone || !fileInput || !browseBtn || !listEl || !runBtn || !clearBtn || !statusEl || !toleranceInput || !mismatchThresholdInput) return;
+        if (!dropzone || !fileInput || !browseBtn || !listEl || !runBtn || !clearBtn || !statusEl || !toleranceInput) return;
 
         function addFiles(fileArray) {
             for (const f of fileArray) {
@@ -1421,7 +1420,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             const tolerancePx = Math.max(0, Math.min(50, Math.round(parseFloat(toleranceInput.value)) || 0));
             // Порог не может быть меньше нормы — иначе даже "нормальные" расхождения
             // никогда бы не находили совпадения и всегда считались бы полным несовпадением.
-            const mismatchThresholdPx = Math.max(tolerancePx, Math.min(50, Math.round(parseFloat(mismatchThresholdInput.value)) || 5));
+            const mismatchThresholdPx = Math.max(tolerancePx, VERSION_MISMATCH_THRESHOLD_PX);
 
             // Группировка: тип + версия -> список файлов в разных цветах
             const groups = new Map();
