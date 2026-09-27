@@ -237,17 +237,24 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     <div class="tool-card">
       <h2>Сверить версии по цветам</h2>
-      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать. Расхождения в пределах ~2px от края силуэта (сглаживание) не учитываются, а всё, что глубже — ошибка.</p>
+      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать. Разница измеряется в пикселях: если силуэт просто чуть толще/тоньше (сместился на N px по краю) — показывается разница в px; если где-то деталь выходит далеко за пределы силуэта эталона (силуэты принципиально разные) — версии помечаются как несовпадающие.</p>
       <div id="version-check-dropzone" class="rename-dropzone">
         <p>Перетащите файлы сюда или выберите вручную</p>
         <input type="file" id="version-check-file-input" accept="image/*" multiple style="display:none;">
         <button type="button" id="version-check-browse-button">Выбрать файлы</button>
       </div>
       <ul id="version-check-file-list" class="rename-file-list"></ul>
-      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;margin-bottom:12px;">
-        Допустимый % несовпадающих пикселей:
-        <input type="number" id="version-tolerance-input" value="0" min="0" max="100" step="0.1" style="width:60px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
-      </label>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;">
+          Норма (px):
+          <input type="number" id="version-tolerance-input" value="1" min="0" max="50" step="1" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;">
+          Порог «версии не совпадают» (px):
+          <input type="number" id="version-mismatch-threshold-input" value="5" min="1" max="50" step="1" style="width:55px;padding:3px 5px;border-radius:4px;border:1px solid var(--accent);">
+        </label>
+      </div>
+      <p style="margin:-6px 0 12px;font-size:.75rem;color:rgba(52,30,15,.65);">«Норма» — до скольких px разница считается просто сглаживанием/более толстым контуром и не отмечается. «Порог» — начиная с какого px расхождение уже не «толще контур», а другая версия (силуэты сравниваются только до этого радиуса — если не сошлись, значит совсем разные).</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" id="version-check-run-btn" disabled>Сверить версии</button>
         <button type="button" id="version-check-clear-files" class="rename-add-suffix">Очистить список</button>
@@ -1257,76 +1264,86 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         return arr;
     }
 
-    // Зона "далеко от края маски": пиксель считается "ядром" (core), если все пиксели
-    // в его окрестности радиусом `radius` в эталонной маске того же типа (все закрашены
-    // или все прозрачны). Рядом с краем силуэта окрестность неоднородна — такие пиксели
-    // не ядро, расхождения там считаем сглаживанием (antialiasing) и не учитываем.
-    // Реализовано как раздельная (сепарабельная) эрозия/дилатация: сначала по строкам,
-    // затем по столбцам — быстрее, чем полный перебор окна на каждый пиксель.
-    function computeCoreZone(filledArray, width, height, radius) {
+    // Дилатация маски (расширение закрашенной области) квадратным окном радиуса `radius`
+    // (метрика Чебышёва — «шахматное» расстояние). Реализовано раздельно (сепарабельно):
+    // сначала max-фильтр по строкам, затем по столбцам — быстрее полного перебора окна.
+    function boxDilate(filledArray, width, height, radius) {
+        if (radius <= 0) return filledArray;
         const total = width * height;
-        const hMin = new Uint8Array(total);
         const hMax = new Uint8Array(total);
 
         for (let y = 0; y < height; y++) {
             const rowOffset = y * width;
             for (let x = 0; x < width; x++) {
-                let mn = 1, mx = 0;
+                let mx = 0;
                 const xStart = Math.max(0, x - radius);
                 const xEnd = Math.min(width - 1, x + radius);
                 for (let xx = xStart; xx <= xEnd; xx++) {
-                    const v = filledArray[rowOffset + xx];
-                    if (v < mn) mn = v;
-                    if (v > mx) mx = v;
+                    if (filledArray[rowOffset + xx]) { mx = 1; break; }
                 }
-                hMin[rowOffset + x] = mn;
                 hMax[rowOffset + x] = mx;
             }
         }
 
-        const core = new Uint8Array(total);
+        const out = new Uint8Array(total);
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
-                let mn = 1, mx = 0;
+                let mx = 0;
                 const yStart = Math.max(0, y - radius);
                 const yEnd = Math.min(height - 1, y + radius);
                 for (let yy = yStart; yy <= yEnd; yy++) {
-                    const idx = yy * width + x;
-                    const hmn = hMin[idx];
-                    const hmx = hMax[idx];
-                    if (hmn < mn) mn = hmn;
-                    if (hmx > mx) mx = hmx;
+                    if (hMax[yy * width + x]) { mx = 1; break; }
                 }
-                core[y * width + x] = (mn === mx) ? 1 : 0;
+                out[y * width + x] = mx;
             }
         }
 
-        return core;
+        return out;
     }
 
-    function compareCostumeMasks(ref, cmp, coreZone) {
+    // A содержится в дилатированном B: каждый закрашенный пиксель A должен попадать
+    // в расширенную область B (иначе в A есть кусок, до которого B «не дотягивается»).
+    function isContainedInDilated(a, dilatedB, total) {
+        for (let p = 0; p < total; p++) {
+            if (a[p] && !dilatedB[p]) return false;
+        }
+        return true;
+    }
+
+    // Сравнение двух масок через дилатацию (по сути — расстояние Хаусдорфа в метрике
+    // Чебышёва): ищем минимальный радиус r, при котором силуэт cmp целиком помещается
+    // в силуэт ref, расширенный на r px, и наоборот. Этот r и есть «разница в px» —
+    // если она маленькая, значит контур просто чуть толще/тоньше; если такого r не
+    // нашлось до maxRadius включительно, силуэты различаются по форме, а не по
+    // толщине линии (например деталь выходит далеко за пределы эталонного силуэта).
+    function compareCostumeMasksPx(ref, cmp, maxRadius) {
         if (ref.width !== cmp.width || ref.height !== cmp.height) {
             return { sizeMismatch: true, refSize: [ref.width, ref.height], cmpSize: [cmp.width, cmp.height] };
         }
 
-        const a = ref.data, b = cmp.data;
-        const totalPixels = ref.width * ref.height;
-        let diffCount = 0;
+        const width = ref.width, height = ref.height;
+        const total = width * height;
+        const refFilled = alphaFilledArray(ref.data, width, height);
+        const cmpFilled = alphaFilledArray(cmp.data, width, height);
 
-        for (let i = 0, p = 0; p < totalPixels; i += 4, p++) {
-            if (!coreZone[p]) continue; // рядом с краем маски — считаем сглаживанием, пропускаем
-            const aFilled = a[i + 3] > 0;
-            const bFilled = b[i + 3] > 0;
-            if (aFilled !== bFilled) diffCount++;
+        // Быстрая проверка на полное совпадение (разница 0px).
+        let identical = true;
+        for (let p = 0; p < total; p++) {
+            if (refFilled[p] !== cmpFilled[p]) { identical = false; break; }
+        }
+        if (identical) {
+            return { sizeMismatch: false, matched: true, distancePx: 0 };
         }
 
-        return {
-            sizeMismatch: false,
-            diffCount,
-            totalPixels,
-            diffPercent: totalPixels ? (diffCount / totalPixels * 100) : 0
-        };
+        for (let r = 1; r <= maxRadius; r++) {
+            const dilatedRef = boxDilate(refFilled, width, height, r);
+            const dilatedCmp = boxDilate(cmpFilled, width, height, r);
+            if (isContainedInDilated(cmpFilled, dilatedRef, total) && isContainedInDilated(refFilled, dilatedCmp, total)) {
+                return { sizeMismatch: false, matched: true, distancePx: r };
+            }
+        }
 
+        return { sizeMismatch: false, matched: false, distancePx: null };
     }
 
     function initVersionCheckTool() {
@@ -1338,8 +1355,9 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         const clearBtn = document.getElementById('version-check-clear-files');
         const statusEl = document.getElementById('version-check-status');
         const toleranceInput = document.getElementById('version-tolerance-input');
+        const mismatchThresholdInput = document.getElementById('version-mismatch-threshold-input');
 
-        if (!dropzone || !fileInput || !browseBtn || !listEl || !runBtn || !clearBtn || !statusEl || !toleranceInput) return;
+        if (!dropzone || !fileInput || !browseBtn || !listEl || !runBtn || !clearBtn || !statusEl || !toleranceInput || !mismatchThresholdInput) return;
 
         function addFiles(fileArray) {
             for (const f of fileArray) {
@@ -1400,7 +1418,10 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             runBtn.disabled = true;
             statusEl.textContent = 'Разбор названий файлов...';
 
-            const tolerance = Math.max(0, Math.min(100, parseFloat(toleranceInput.value) || 0));
+            const tolerancePx = Math.max(0, Math.min(50, Math.round(parseFloat(toleranceInput.value)) || 0));
+            // Порог не может быть меньше нормы — иначе даже "нормальные" расхождения
+            // никогда бы не находили совпадения и всегда считались бы полным несовпадением.
+            const mismatchThresholdPx = Math.max(tolerancePx, Math.min(50, Math.round(parseFloat(mismatchThresholdInput.value)) || 5));
 
             // Группировка: тип + версия -> список файлов в разных цветах
             const groups = new Map();
@@ -1460,14 +1481,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 const refItem = group.items[0];
                 const issues = [];
 
-                // Игнорируем расхождения в пределах 2px от края силуэта (сглаживание);
-                // всё, что глубже (3+ px от края) и не совпало — уже реальная ошибка.
-                const EDGE_TOLERANCE_PX = 2;
-                const refFilled = alphaFilledArray(refMask.data, refMask.width, refMask.height);
-                const coreZone = computeCoreZone(refFilled, refMask.width, refMask.height, EDGE_TOLERANCE_PX);
-
                 for (let i = 1; i < group.items.length; i++) {
-                    const cmp = compareCostumeMasks(refMask, maskData[i], coreZone);
+                    const cmp = compareCostumeMasksPx(refMask, maskData[i], mismatchThresholdPx);
                     const item = group.items[i];
 
                     if (cmp.sizeMismatch) {
@@ -1475,8 +1490,13 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                         continue;
                     }
 
-                    if (cmp.diffPercent > tolerance) {
-                        issues.push(`   ${item.color} — ${cmp.diffPercent.toFixed(1)}%`);
+                    if (!cmp.matched) {
+                        issues.push(`   ${item.color} — версии НЕ совпадают (силуэты принципиально разные)`);
+                        continue;
+                    }
+
+                    if (cmp.distancePx > tolerancePx) {
+                        issues.push(`   ${item.color} — разница контура ${cmp.distancePx}px`);
                     }
                 }
 
