@@ -237,7 +237,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
 
     <div class="tool-card">
       <h2>Сверить версии по цветам</h2>
-      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать.</p>
+      <p>Название файла вида <code>тип_цвет_версия</code> (например «ожерелье_изумруд_грива 1 2 грудь 1 2»); без версии, например «ожерелье_изумруд», — базовая версия. Скрипт группирует файлы по типу и версии (цвет не важен), превращает каждый в маску прозрачный/закрашенный пиксель и сверяет силуэты внутри группы — у одной версии в разных цветах форма должна совпадать. Расхождения в пределах ~2px от края силуэта (сглаживание) не учитываются, а всё, что глубже — ошибка.</p>
       <div id="version-check-dropzone" class="rename-dropzone">
         <p>Перетащите файлы сюда или выберите вручную</p>
         <input type="file" id="version-check-file-input" accept="image/*" multiple style="display:none;">
@@ -1247,7 +1247,64 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         return forms[2];
     }
 
-    function compareCostumeMasks(ref, cmp) {
+    // Булев массив "закрашено/прозрачно" по альфа-каналу.
+    function alphaFilledArray(data, width, height) {
+        const total = width * height;
+        const arr = new Uint8Array(total);
+        for (let i = 0, p = 0; p < total; i += 4, p++) {
+            arr[p] = data[i + 3] > 0 ? 1 : 0;
+        }
+        return arr;
+    }
+
+    // Зона "далеко от края маски": пиксель считается "ядром" (core), если все пиксели
+    // в его окрестности радиусом `radius` в эталонной маске того же типа (все закрашены
+    // или все прозрачны). Рядом с краем силуэта окрестность неоднородна — такие пиксели
+    // не ядро, расхождения там считаем сглаживанием (antialiasing) и не учитываем.
+    // Реализовано как раздельная (сепарабельная) эрозия/дилатация: сначала по строкам,
+    // затем по столбцам — быстрее, чем полный перебор окна на каждый пиксель.
+    function computeCoreZone(filledArray, width, height, radius) {
+        const total = width * height;
+        const hMin = new Uint8Array(total);
+        const hMax = new Uint8Array(total);
+
+        for (let y = 0; y < height; y++) {
+            const rowOffset = y * width;
+            for (let x = 0; x < width; x++) {
+                let mn = 1, mx = 0;
+                const xStart = Math.max(0, x - radius);
+                const xEnd = Math.min(width - 1, x + radius);
+                for (let xx = xStart; xx <= xEnd; xx++) {
+                    const v = filledArray[rowOffset + xx];
+                    if (v < mn) mn = v;
+                    if (v > mx) mx = v;
+                }
+                hMin[rowOffset + x] = mn;
+                hMax[rowOffset + x] = mx;
+            }
+        }
+
+        const core = new Uint8Array(total);
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
+                let mn = 1, mx = 0;
+                const yStart = Math.max(0, y - radius);
+                const yEnd = Math.min(height - 1, y + radius);
+                for (let yy = yStart; yy <= yEnd; yy++) {
+                    const idx = yy * width + x;
+                    const hmn = hMin[idx];
+                    const hmx = hMax[idx];
+                    if (hmn < mn) mn = hmn;
+                    if (hmx > mx) mx = hmx;
+                }
+                core[y * width + x] = (mn === mx) ? 1 : 0;
+            }
+        }
+
+        return core;
+    }
+
+    function compareCostumeMasks(ref, cmp, coreZone) {
         if (ref.width !== cmp.width || ref.height !== cmp.height) {
             return { sizeMismatch: true, refSize: [ref.width, ref.height], cmpSize: [cmp.width, cmp.height] };
         }
@@ -1256,7 +1313,8 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         const totalPixels = ref.width * ref.height;
         let diffCount = 0;
 
-        for (let i = 0; i < a.length; i += 4) {
+        for (let i = 0, p = 0; p < totalPixels; i += 4, p++) {
+            if (!coreZone[p]) continue; // рядом с краем маски — считаем сглаживанием, пропускаем
             const aFilled = a[i + 3] > 0;
             const bFilled = b[i + 3] > 0;
             if (aFilled !== bFilled) diffCount++;
@@ -1268,6 +1326,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
             totalPixels,
             diffPercent: totalPixels ? (diffCount / totalPixels * 100) : 0
         };
+
     }
 
     function initVersionCheckTool() {
@@ -1401,8 +1460,14 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                 const refItem = group.items[0];
                 const issues = [];
 
+                // Игнорируем расхождения в пределах 2px от края силуэта (сглаживание);
+                // всё, что глубже (3+ px от края) и не совпало — уже реальная ошибка.
+                const EDGE_TOLERANCE_PX = 2;
+                const refFilled = alphaFilledArray(refMask.data, refMask.width, refMask.height);
+                const coreZone = computeCoreZone(refFilled, refMask.width, refMask.height, EDGE_TOLERANCE_PX);
+
                 for (let i = 1; i < group.items.length; i++) {
-                    const cmp = compareCostumeMasks(refMask, maskData[i]);
+                    const cmp = compareCostumeMasks(refMask, maskData[i], coreZone);
                     const item = group.items[i];
 
                     if (cmp.sizeMismatch) {
@@ -1411,7 +1476,7 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                     }
 
                     if (cmp.diffPercent > tolerance) {
-                        issues.push(`   ${item.color}`);
+                        issues.push(`   ${item.color} — ${cmp.diffPercent.toFixed(1)}%`);
                     }
                 }
 
