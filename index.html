@@ -1238,6 +1238,15 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
         });
     }
 
+    function pluralizeRu(n, forms) {
+        const mod10 = n % 10;
+        const mod100 = n % 100;
+        if (mod100 >= 11 && mod100 <= 14) return forms[2];
+        if (mod10 === 1) return forms[0];
+        if (mod10 >= 2 && mod10 <= 4) return forms[1];
+        return forms[2];
+    }
+
     function compareCostumeMasks(ref, cmp) {
         if (ref.width !== cmp.width || ref.height !== cmp.height) {
             return { sizeMismatch: true, refSize: [ref.width, ref.height], cmpSize: [cmp.width, cmp.height] };
@@ -1397,30 +1406,32 @@ footer{text-align:center;margin-top:36px;font-size:.8rem;color:rgba(243,227,200,
                     const item = group.items[i];
 
                     if (cmp.sizeMismatch) {
-                        issues.push(`  - "${item.file.name}" (${cmp.cmpSize[0]}x${cmp.cmpSize[1]}) не совпадает по размеру с эталоном "${refItem.file.name}" (${cmp.refSize[0]}x${cmp.refSize[1]})`);
+                        issues.push(`   ${item.color} — размер ${cmp.cmpSize[0]}×${cmp.cmpSize[1]} ≠ ${cmp.refSize[0]}×${cmp.refSize[1]}`);
                         continue;
                     }
 
                     if (cmp.diffPercent > tolerance) {
-                        issues.push(`  - "${item.file.name}" (цвет: ${item.color}) отличается от эталона "${refItem.file.name}" (цвет: ${refItem.color}): ${cmp.diffCount} пикс. (${cmp.diffPercent.toFixed(2)}%)`);
+                        issues.push(`   ${item.color} — ${cmp.diffCount} пикс. (${cmp.diffPercent.toFixed(1)}%)`);
                     }
                 }
 
                 if (issues.length) {
                     groupsWithIssues++;
-                    reportLines.push(`❌ ${group.type} | ${group.version} (эталон: цвет "${refItem.color}"):`);
+                    reportLines.push(`❌ ${group.type} | ${group.version} — ${issues.length} из ${group.items.length} не совпадают с «${refItem.color}»`);
                     reportLines.push(...issues);
                 } else {
                     groupsOk++;
-                    reportLines.push(`✅ ${group.type} | ${group.version}: ${group.items.length} цвет(а/ов) — силуэты совпадают`);
+                    const colorsWord = pluralizeRu(group.items.length, ['цвет', 'цвета', 'цветов']);
+                    reportLines.push(`✅ ${group.type} | ${group.version} — ${group.items.length} ${colorsWord} совпадают`);
                 }
             }
 
-            let summary = `Готово. Групп с 2+ файлами: ${groupsOk + groupsWithIssues} (ок: ${groupsOk}, с несовпадениями: ${groupsWithIssues}).`;
-            if (groupsSkippedSingle) summary += ` Групп из 1 файла (пропущены): ${groupsSkippedSingle}.`;
-            if (skipped.length) summary += ` Не разобрано названий (нет "тип_цвет"): ${skipped.length} — ${skipped.join(', ')}.`;
+            const notes = [];
+            if (groupsSkippedSingle) notes.push(`без пары для сравнения: ${groupsSkippedSingle}`);
+            if (skipped.length) notes.push(`не разобрано названий: ${skipped.join(', ')}`);
 
-            statusEl.textContent = summary + (reportLines.length ? ('\n\n' + reportLines.join('\n')) : '');
+            const body = reportLines.length ? reportLines.join('\n') : 'Нет групп для сравнения — нужно минимум 2 файла одного типа и версии.';
+            statusEl.textContent = body + (notes.length ? ('\n\n' + notes.join('\n')) : '');
             runBtn.disabled = versionCheckFiles.length === 0;
         });
     }
